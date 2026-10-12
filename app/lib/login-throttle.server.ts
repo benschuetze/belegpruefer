@@ -4,23 +4,23 @@ import { loginAttempts } from "~/lib/db/schema";
 
 export const WINDOW_MS = 15 * 60 * 1000;
 export const MAX_PER_IP = 5;
-/** Across all IPs, against guessing from many addresses at once. One user means legitimate failures are rare. */
-export const MAX_GLOBAL = 30;
 
-export async function isLoginBlocked(db: Db, ipHash: string, now = new Date()): Promise<boolean> {
-  const since = new Date(now.getTime() - WINDOW_MS);
-  const [fromIp, overall] = await Promise.all([
-    db.$count(loginAttempts, and(eq(loginAttempts.ipHash, ipHash), gte(loginAttempts.attemptedAt, since))),
-    db.$count(loginAttempts, gte(loginAttempts.attemptedAt, since)),
-  ]);
-  return fromIp >= MAX_PER_IP || overall >= MAX_GLOBAL;
-}
-
-export async function recordFailedLogin(db: Db, ipHash: string, now = new Date()): Promise<void> {
+/**
+ * Records the attempt first and counts afterwards, so parallel requests cannot all pass the check before any of
+ * them is written: each one counts at least everything inserted before it. Per IP only: a global limit would let
+ * anyone lock the owner out with 30 wrong guesses from anywhere.
+ */
+export async function takeLoginAttempt(db: Db, ipHash: string, now = new Date()): Promise<boolean> {
   await db.insert(loginAttempts).values({ ipHash, attemptedAt: now });
+  const since = new Date(now.getTime() - WINDOW_MS);
+  const recent = await db.$count(
+    loginAttempts,
+    and(eq(loginAttempts.ipHash, ipHash), gte(loginAttempts.attemptedAt, since)),
+  );
   await db.delete(loginAttempts).where(lt(loginAttempts.attemptedAt, new Date(now.getTime() - 24 * 60 * 60 * 1000)));
+  return recent <= MAX_PER_IP;
 }
 
-export async function clearFailedLogins(db: Db, ipHash: string): Promise<void> {
+export async function clearLoginAttempts(db: Db, ipHash: string): Promise<void> {
   await db.delete(loginAttempts).where(eq(loginAttempts.ipHash, ipHash));
 }

@@ -1,7 +1,8 @@
 import { data, Form, useActionData, useSearchParams } from "react-router";
+import { z } from "zod";
 import { logIn, loginConfigured, passwordMatches } from "~/lib/auth.server";
 import { getDb } from "~/lib/db/client";
-import { clearFailedLogins, isLoginBlocked, recordFailedLogin } from "~/lib/login-throttle.server";
+import { clearLoginAttempts, takeLoginAttempt } from "~/lib/login-throttle.server";
 import { clientIp, hashIp } from "~/lib/security.server";
 import type { Route } from "./+types/login";
 
@@ -16,17 +17,18 @@ export async function action({ request }: Route.ActionArgs) {
   }
   const db = getDb();
   const ip = hashIp(clientIp(request));
-  // Checked before the password: while blocked, even the right password gets no answer about being right.
-  if (await isLoginBlocked(db, ip)) {
-    return data({ error: "Zu viele Fehlversuche. Bitte in 15 Minuten erneut versuchen." }, { status: 429 });
+  // Counted before the password: while blocked, even the right password gets no answer about being right.
+  if (!(await takeLoginAttempt(db, ip))) {
+    return data({ error: "Zu viele Versuche. Bitte in 15 Minuten erneut versuchen." }, { status: 429 });
   }
-  const form = await request.formData();
-  if (!passwordMatches(String(form.get("password") ?? ""))) {
-    await recordFailedLogin(db, ip);
+  const form = z
+    .object({ password: z.string().max(500), next: z.string().max(500).default("/") })
+    .safeParse(Object.fromEntries(await request.formData()));
+  if (!form.success || !passwordMatches(form.data.password)) {
     return data({ error: "Passwort stimmt nicht." }, { status: 400 });
   }
-  await clearFailedLogins(db, ip);
-  return logIn(request, String(form.get("next") ?? "/"));
+  await clearLoginAttempts(db, ip);
+  return logIn(request, form.data.next);
 }
 
 export default function Login() {
