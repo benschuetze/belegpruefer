@@ -2,7 +2,7 @@ import { type Example, type KontiererOutput, runKontierer } from "~/lib/agents/k
 import type { AgentModels } from "~/lib/agents/models";
 import { PROMPT_VERSIONS } from "~/lib/agents/prompts";
 import { type PrueferOutput, runPruefer } from "~/lib/agents/pruefer";
-import { type RechercheOutput, type ResearchTools, runRecherche } from "~/lib/agents/recherche";
+import { MAX_RESEARCH_STEPS, type RechercheOutput, type ResearchTools, runRecherche } from "~/lib/agents/recherche";
 import type { Beleg } from "~/lib/beleg";
 import type { NewDecision, SupplierProfile } from "~/lib/db/schema";
 
@@ -40,14 +40,16 @@ export function unknownSupplier(knownProfile: SupplierProfile | null, history: E
   return !knownProfile && history.length === 0;
 }
 
-/** How many model calls the team will make for this document, for the daily budget. */
+/** Upper bound of model calls for this document, for the daily budget. Research may take one call per step. */
 export function plannedCalls(team: Team, unknown: boolean): number {
-  return 1 + (team.pruefer ? 1 : 0) + (team.recherche && unknown ? 1 : 0);
+  return 1 + (team.pruefer ? 1 : 0) + (team.recherche && unknown ? MAX_RESEARCH_STEPS : 0);
 }
 
 /**
- * The agent part of the chain, shared by production (`processDocument`) and `pnpm eval`, so the eval measures
- * exactly what runs. Only reads and proposes; it writes nothing.
+ * The agent part of the chain, shared by production (`processDocument`) and `pnpm eval`, so both run the same
+ * agents and the same decision. What differs is only the input: production loads history and stored supplier
+ * profiles from the database, the eval derives history from earlier eval cases and has no stored profiles.
+ * Only reads and proposes; it writes nothing.
  */
 export async function runTeam(input: TeamInput): Promise<TeamResult> {
   const { models, beleg, team } = input;

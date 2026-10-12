@@ -8,7 +8,7 @@ import { bookings, decisions, documents, suppliers } from "./db/schema";
 import { DEMO_TENANTS } from "./db/seed";
 import { storeUpload } from "./documents.server";
 import { buildCiiXml } from "./parser/build-cii";
-import { processDocument } from "./process.server";
+import { processDocument, supplierHistory } from "./process.server";
 
 const A = DEMO_TENANTS[0].id;
 const B = DEMO_TENANTS[1].id;
@@ -302,5 +302,29 @@ describe("PDF über den Extraktor", () => {
     const result = await processDocument(db, A, stored.id, { models, research: NO_RESEARCH, today: TODAY });
     expect(result.status === "fehler" && result.error).toMatch(/PDF nicht lesbar/);
     expect(await db.select().from(bookings)).toEqual([]);
+  });
+});
+
+describe("Historie für Beispiele und Recherche", () => {
+  it("nur derselbe Lieferant zählt, nicht jeder mit dem gleichen ersten Wort", async () => {
+    const { db } = await createTestDb();
+    const hotel = (name: string) =>
+      Buffer.from(
+        buildCiiXml(
+          makeBeleg([{ description: "Übernachtung", netCents: 10000, taxRate: 7 }], {
+            invoiceNumber: name.slice(-1),
+            supplier: { name, street: "Kai 1", city: "Kiel", country: "DE", vatId: "DE867423158" },
+          }),
+        ),
+      );
+    const booking = { zeilen: [{ satz: 7, konto: "4670", buSchluessel: "8" }], konfidenz: 0.95, begruendung: "Hotel" };
+    const stored = await storeUpload(db, A, "a.xml", hotel("Hotel Am Hafen A"));
+    if (stored.status !== "neu") throw new Error();
+    await processDocument(db, A, stored.id, { models: team(booking), research: NO_RESEARCH, today: TODAY });
+    await db.update(documents).set({ status: "bestaetigt" }).where(eq(documents.id, stored.id));
+
+    expect(await supplierHistory(db, A, "hotel am hafen a")).toHaveLength(1);
+    expect(await supplierHistory(db, A, "Hotel Am Hafen B")).toHaveLength(0);
+    expect(await supplierHistory(db, B, "Hotel Am Hafen A")).toHaveLength(0);
   });
 });

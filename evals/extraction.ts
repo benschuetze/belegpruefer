@@ -17,6 +17,8 @@ const norm = (s: string | undefined) => (s ?? "").replace(/\s+/g, " ").trim().to
 
 /** Field by field: did the extractor read what is printed? Missing on both sides counts as right. */
 export function compareExtraction(expected: Beleg, actual: Beleg | null): Record<Field, boolean> {
+  // Nothing read is wrong everywhere, also where the invoice itself has no value for a field.
+  if (!actual) return Object.fromEntries(FIELDS.map((f) => [f, false])) as Record<Field, boolean>;
   const rates = (b: Beleg) =>
     b.taxGroups
       .map((g) => g.rate)

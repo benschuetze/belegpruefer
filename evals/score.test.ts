@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { KontiererOutput } from "../app/lib/agents/kontierer";
+import { kontiererSchema } from "../app/lib/agents/kontierer";
 import { buildBeleg } from "../app/lib/beleg-builder";
 import { judge, summarize, thresholdSweep } from "./score";
 import type { CaseRun, EvalCase } from "./types";
@@ -15,7 +15,7 @@ const evalCase = (over: Partial<EvalCase["expected"]> = {}): EvalCase => ({
 });
 const run = (konto: string, konfidenz: number, pruefer?: CaseRun["pruefer"]): CaseRun => ({
   id: "B1",
-  kontierer: { zeilen: [{ satz: 19, konto, buSchluessel: "9" }], konfidenz, begruendung: "" } as KontiererOutput,
+  kontierer: kontiererSchema.parse({ zeilen: [{ satz: 19, konto, buSchluessel: "9" }], konfidenz, begruendung: "" }),
   pruefer,
   researched: false,
   examples: 0,

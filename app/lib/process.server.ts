@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { and, desc, eq, ilike, inArray } from "drizzle-orm";
+import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { extractPdf } from "~/lib/agents/extraktor";
 import type { BookingLine, Example, KontiererOutput } from "~/lib/agents/kontierer";
 import type { AgentModels } from "~/lib/agents/models";
@@ -75,9 +75,11 @@ export function bookingsFor(
   });
 }
 
-/** Earlier bookings of this tenant at a supplier with a similar name that a person has confirmed. */
+/**
+ * Earlier bookings of this tenant at the same supplier (name as on the invoice, case-insensitive) that a person
+ * has confirmed. Same supplier only: "Hotel …" must not pull in every hotel the tenant ever stayed at.
+ */
 export async function supplierHistory(db: Db, tenantId: string, name: string, limit = 5) {
-  const pattern = `%${name.replace(/[%_\\]/g, "").split(/\s+/)[0] ?? ""}%`;
   const rows = await db
     .select({ extracted: documents.extracted, account: bookings.account, taxKey: bookings.taxKey, text: bookings.text })
     .from(bookings)
@@ -86,7 +88,7 @@ export async function supplierHistory(db: Db, tenantId: string, name: string, li
       and(
         eq(bookings.tenantId, tenantId),
         inArray(documents.status, [...CONFIRMED_STATUSES]),
-        ilike(bookings.text, pattern),
+        sql`lower(${documents.extracted}->'supplier'->>'name') = lower(${name})`,
       ),
     )
     .orderBy(desc(bookings.createdAt))

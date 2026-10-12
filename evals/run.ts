@@ -8,6 +8,7 @@
  */
 import "dotenv/config";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { z } from "zod";
 import type { Example } from "../app/lib/agents/kontierer";
 import { kontiererMessages } from "../app/lib/agents/kontierer";
 import { DEFAULT_MODEL_IDS, getLiveAgentModels } from "../app/lib/agents/models";
@@ -28,10 +29,25 @@ const value = (name: string) => {
 };
 
 const all = cases as EvalCase[];
-const limit = Number(value("--limit") ?? all.length);
-const selected = all.slice(0, limit);
-const variants = (value("--variante")?.split(",") ?? ["1", "2", "3", "4"]) as VariantId[];
-const maxCostUsd = Number(value("--max-kosten") ?? 15);
+const options = z
+  .object({
+    limit: z.coerce.number().int().positive().default(all.length),
+    variants: z
+      .array(z.enum(["1", "2", "3", "4"]))
+      .min(1)
+      .default(["1", "2", "3", "4"]),
+    maxCostUsd: z.coerce.number().positive().default(15),
+  })
+  .parse({
+    limit: value("--limit"),
+    variants: value("--variante")?.split(","),
+    maxCostUsd: value("--max-kosten"),
+  });
+const selected = all.slice(0, options.limit);
+const variants: VariantId[] = options.variants;
+const maxCostUsd = options.maxCostUsd;
+/** Across all variants of this run: the limit is for the whole bill, not per variant. */
+let spentMicrocents = 0;
 const RUNS_DIR = new URL("./runs/", import.meta.url);
 
 /**
@@ -98,10 +114,10 @@ function estimate() {
 async function runVariant(v: VariantId): Promise<CaseRun[]> {
   const models = getLiveAgentModels();
   const team = VARIANTS[v];
-  let spentMicrocents = 0;
   let done = 0;
-  const runs = await mapLimit(selected, 3, async (c): Promise<CaseRun> => {
-    if (spentMicrocents / 1e8 > maxCostUsd) throw new Error(`Kostengrenze ${maxCostUsd} $ erreicht, Abbruch.`);
+  // Past the cost limit the remaining cases are skipped, not thrown away: what was paid for gets written.
+  const runs = await mapLimit(selected, 3, async (c): Promise<CaseRun | null> => {
+    if (spentMicrocents / 1e8 > maxCostUsd) return null;
     const history = historyFor(all.indexOf(c));
     const started = Date.now();
     const result = await runTeam({
@@ -136,7 +152,13 @@ async function runVariant(v: VariantId): Promise<CaseRun[]> {
         .filter((e): e is string => Boolean(e)),
     };
   });
-  return runs;
+  const finished = runs.filter((r): r is CaseRun => r !== null);
+  if (finished.length < selected.length) {
+    console.error(
+      `  Kostengrenze ${maxCostUsd} $ erreicht: ${selected.length - finished.length} Belege nicht gemessen.`,
+    );
+  }
+  return finished;
 }
 
 function writeResult(runsByVariant: Partial<Record<VariantId, CaseRun[]>>, measuredAt: string) {
@@ -173,7 +195,10 @@ function writeResult(runsByVariant: Partial<Record<VariantId, CaseRun[]>>, measu
     variants: variantsOut,
     sweep: last ? thresholdSweep(all, runsByVariant[last] ?? []) : [],
   };
-  writeFileSync(new URL("./ergebnis.json", import.meta.url), `${JSON.stringify(result, null, 1)}\n`);
+  // Keep what other runners wrote (the extraction eval), replace only the ablation part.
+  const file = new URL("./ergebnis.json", import.meta.url);
+  const previous = JSON.parse(readFileSync(file, "utf8")) as Record<string, unknown>;
+  writeFileSync(file, `${JSON.stringify({ ...previous, ...result }, null, 1)}\n`);
   return result;
 }
 
@@ -217,6 +242,10 @@ if (flag("--nur-auswerten")) {
       `${JSON.stringify(runsByVariant[v], null, 1)}\n`,
     );
   }
+}
+if (Object.values(runsByVariant).every((r) => !r || r.length === 0)) {
+  console.error("Keine gemessenen Läufe: evals/ergebnis.json bleibt unverändert.");
+  process.exit(1);
 }
 const result = writeResult(runsByVariant, today);
 printTable(result);

@@ -18,5 +18,11 @@ describe("Extraktion bewerten", () => {
     const actual = { ...expected, totals: { ...expected.totals, grossCents: expected.totals.grossCents + 1 } };
     expect(compareExtraction(expected, actual).brutto).toBe(false);
     expect(Object.values(compareExtraction(expected, null)).some(Boolean)).toBe(false);
+    const withoutNumber = {
+      ...expected,
+      invoiceNumber: undefined,
+      supplier: { ...expected.supplier, vatId: undefined },
+    };
+    expect(Object.values(compareExtraction(withoutNumber, null)).some(Boolean)).toBe(false);
   });
 });

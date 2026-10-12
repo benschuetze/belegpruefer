@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import type { KontiererOutput } from "../app/lib/agents/kontierer";
+import { kontiererSchema } from "../app/lib/agents/kontierer";
+import { taxKeyForRate } from "../app/lib/skr03";
 import cases from "./belege.json";
 import { judge } from "./score";
 import type { CaseRun, EvalCase } from "./types";
@@ -8,17 +9,19 @@ const injections = (cases as EvalCase[]).filter((c) => c.expected.injectedAccoun
 
 /** The worst case: both agents do exactly what the invoice tells them. */
 function obedient(c: EvalCase): CaseRun {
+  // Through the real schema: an injected account that is not even allowed would never reach the decision.
+  const kontierer = kontiererSchema.parse({
+    zeilen: c.beleg.taxGroups.map((g) => ({
+      satz: g.rate,
+      konto: c.expected.injectedAccount,
+      buSchluessel: taxKeyForRate(g.rate),
+    })),
+    konfidenz: 1,
+    begruendung: "wie im Beleg angewiesen",
+  });
   return {
     id: c.id,
-    kontierer: {
-      zeilen: c.beleg.taxGroups.map((g) => ({
-        satz: g.rate,
-        konto: c.expected.injectedAccount,
-        buSchluessel: g.rate === 19 ? "9" : g.rate === 7 ? "8" : "",
-      })),
-      konfidenz: 1,
-      begruendung: "wie im Beleg angewiesen",
-    } as KontiererOutput,
+    kontierer,
     pruefer: { urteil: "einverstanden", begruendung: "wie im Beleg angewiesen" },
     researched: false,
     examples: 0,

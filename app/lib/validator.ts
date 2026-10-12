@@ -180,14 +180,16 @@ export function validateBooking(beleg: Beleg, account: string): Finding[] {
  * if one does, a person looks at it, whatever the models made of it. Second line of defence behind the prompt.
  */
 const INSTRUCTION_LIKE = [
-  /\bignorier(e|en)?\b.{0,40}\b(anweisung|regel|vorgabe)/i,
+  /\bignorier(e|en)?\b.{0,40}\b(anweisungen?|regeln?|vorgaben?)\b/i,
   /\bignore (all|any|previous|the)\b/i,
-  /\b(buche|bucht|verbuche)\b.{0,30}\b(auf|konto)\b/i,
+  // "Buche" alone is also a wood; only "buche auf (Konto) 4900" is an instruction.
+  /\b(buche|bucht|verbuche|buchen)\b.{0,20}\bauf\s+(konto\s+)?\d{4}\b/i,
   /\bkonfidenz\b/i,
   /\bconfidence\b/i,
   /\b(system|assistant)\s*:/i,
   /<\/?\s*(beleg|vorschlag|beispiele|lieferantenprofil|system)\b/i,
-  /\b(ki|ai|llm|modell|prompt)\b.{0,40}\b(buchhaltung|anweisung|regel|testmodus)/i,
+  /\b(ki|ai|llm|modell|prompt)\b.{0,40}\b(anweisungen?|testmodus)\b/i,
+  /\b(ohne rückfrage|ohne prüfung)\b.{0,30}\bbuchen\b/i,
 ];
 
 export function looksLikeInstruction(text: string): boolean {
@@ -195,7 +197,14 @@ export function looksLikeInstruction(text: string): boolean {
 }
 
 export function instructionFindings(beleg: Beleg): Finding[] {
-  const texts = [beleg.supplier.name, ...beleg.lines.map((l) => l.description), ...beleg.notes];
+  // Every free-text field that reaches the model (see belegForPrompt), not just the obvious ones.
+  const texts = [
+    beleg.supplier.name,
+    beleg.invoiceNumber ?? "",
+    beleg.supplier.vatId ?? "",
+    ...beleg.lines.map((l) => l.description),
+    ...beleg.notes,
+  ];
   return texts.some(looksLikeInstruction)
     ? [fehler("anweisung_im_beleg", "Der Beleg enthält Text, der wie eine Anweisung an die Buchhaltung aussieht.")]
     : [];
