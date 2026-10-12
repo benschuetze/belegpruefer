@@ -147,6 +147,8 @@ export function validateBeleg(beleg: Beleg, today: string): Finding[] {
     findings.push(hinweis("ohne_steuer", "Inländische Rechnung ohne Umsatzsteuer: Kleinunternehmer oder steuerfrei?"));
   }
 
+  findings.push(...instructionFindings(beleg));
+
   if (beleg.lines.some(aboveGwgLimit)) {
     findings.push(hinweis("ueber_gwg_grenze", "Eine Position liegt über 800 € netto: möglicherweise Anlagevermögen."));
   }
@@ -171,6 +173,32 @@ export function validateBooking(beleg: Beleg, account: string): Finding[] {
     findings.push(fehler("gwg_grenze", "GWG-Sofortabschreibung, aber eine Position liegt über 800 € netto."));
   }
   return findings;
+}
+
+/**
+ * Text that talks to the bookkeeping instead of describing goods. Invoices do not tell anyone how to book them;
+ * if one does, a person looks at it, whatever the models made of it. Second line of defence behind the prompt.
+ */
+const INSTRUCTION_LIKE = [
+  /\bignorier(e|en)?\b.{0,40}\b(anweisung|regel|vorgabe)/i,
+  /\bignore (all|any|previous|the)\b/i,
+  /\b(buche|bucht|verbuche)\b.{0,30}\b(auf|konto)\b/i,
+  /\bkonfidenz\b/i,
+  /\bconfidence\b/i,
+  /\b(system|assistant)\s*:/i,
+  /<\/?\s*(beleg|vorschlag|beispiele|lieferantenprofil|system)\b/i,
+  /\b(ki|ai|llm|modell|prompt)\b.{0,40}\b(buchhaltung|anweisung|regel|testmodus)/i,
+];
+
+export function looksLikeInstruction(text: string): boolean {
+  return INSTRUCTION_LIKE.some((pattern) => pattern.test(text));
+}
+
+export function instructionFindings(beleg: Beleg): Finding[] {
+  const texts = [beleg.supplier.name, ...beleg.lines.map((l) => l.description), ...beleg.notes];
+  return texts.some(looksLikeInstruction)
+    ? [fehler("anweisung_im_beleg", "Der Beleg enthält Text, der wie eine Anweisung an die Buchhaltung aussieht.")]
+    : [];
 }
 
 export function hasErrors(findings: Finding[]): boolean {
