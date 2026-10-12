@@ -2,7 +2,7 @@
 
 Eingangsrechnungen für mehrere Mandanten: hochladen, auslesen, nach SKR03 kontieren, von einem zweiten Agenten prüfen lassen, automatisch buchen oder dir vorlegen, festschreiben, als DATEV-Buchungsstapel exportieren. Dazu eine Messung, ob sich das Agenten-Team gegenüber einem einzelnen Modell lohnt.
 
-**Demo:** _noch nicht veröffentlicht_ (Vercel-Projekt mit Neon in Frankfurt ist vorbereitet: `vercel.json`, `DEMO_MODE=true`, `AI_MOCK=1`) · schreibgeschützt, zwei erfundene Mandanten, erfundene Rechnungen, die Agenten laufen dort als feste Stichwort-Modelle („Mockdaten“).
+**Demo:** _noch nicht veröffentlicht_ (vorbereitet in `vercel.json`; im Vercel-Projekt zu setzen: Neon-Datenbank in Frankfurt, `DEMO_MODE=true`, `AI_MOCK=1`) · schreibgeschützt, zwei erfundene Mandanten, erfundene Rechnungen, die Agenten laufen dort als feste Stichwort-Modelle („Mockdaten“).
 
 Die Startseite beantwortet eine Frage: **Wie viele Belege sind fertig, wie viele brauchen dich?**
 
