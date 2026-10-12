@@ -10,11 +10,15 @@ export function isDemo(): boolean {
 
 const MIN_SECRET_LENGTH = 32;
 const DEV_SECRET = "nur-fuer-lokale-entwicklung-0000000";
+const DEMO_SECRET = "oeffentliche-demo-ohne-login-00000000";
 
 /** In production a missing or weak secret means no sessions at all; a known fallback would let anyone forge one. */
 function sessionSecret(): string | null {
   const secret = process.env.SESSION_SECRET;
   if (secret && secret.length >= MIN_SECRET_LENGTH) return secret;
+  // The public demo has no login and only invented tenants: its cookie holds which one you are looking at, nothing
+  // worth forging. A known value is fine there and nowhere else.
+  if (isDemo()) return DEMO_SECRET;
   return process.env.NODE_ENV === "production" ? null : DEV_SECRET;
 }
 

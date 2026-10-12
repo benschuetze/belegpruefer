@@ -1,26 +1,33 @@
 import { z } from "zod";
 
-/**
- * One incoming invoice in structured form, whatever it came from (XML parser, PDF extractor, eval set).
- * Amounts are integer cents, tax rates whole percent, dates yyyy-mm-dd. Optional means "not on the invoice";
- * the validator decides whether that is allowed.
+/** A real calendar date, not just the shape: 2026-02-30 is refused here, not by the database later. */
+export const isoDate = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, "Datum als yyyy-mm-dd")
+  .refine((value) => {
+    const date = new Date(`${value}T00:00:00Z`);
+    return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value;
+  }, "kein gültiges Datum");
+/*
+ * Upper bounds for everything that ends up in a prompt. A real invoice stays far below them; a 2 MB note would
+ * otherwise go to every agent and cost money on every call, which the daily budget (counting calls) cannot see.
  */
-const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Datum als yyyy-mm-dd");
+const short = z.string().max(200);
 const cents = z.number().int();
 
 export const partySchema = z.object({
-  name: z.string().min(1),
-  street: z.string().optional(),
-  postcode: z.string().optional(),
-  city: z.string().optional(),
+  name: short.min(1),
+  street: short.optional(),
+  postcode: short.optional(),
+  city: short.optional(),
   /** ISO 3166-1 alpha-2 */
   country: z.string().length(2).optional(),
-  vatId: z.string().optional(),
-  taxNumber: z.string().optional(),
+  vatId: z.string().max(30).optional(),
+  taxNumber: z.string().max(30).optional(),
 });
 
 export const lineSchema = z.object({
-  description: z.string(),
+  description: z.string().max(500),
   quantity: z.number().optional(),
   netCents: cents,
   taxRate: z.number().int().min(0).max(100),
@@ -34,18 +41,23 @@ export const taxGroupSchema = z.object({
   category: z.string().optional(),
 });
 
+/**
+ * One incoming invoice in structured form, whatever it came from (XML parser, PDF extractor, eval set).
+ * Amounts are integer cents, tax rates whole percent, dates yyyy-mm-dd. Optional means "not on the invoice";
+ * the validator decides whether that is allowed.
+ */
 export const belegSchema = z.object({
-  invoiceNumber: z.string().optional(),
+  invoiceNumber: z.string().max(100).optional(),
   issueDate: isoDate.optional(),
   deliveryDate: isoDate.optional(),
   currency: z.string().length(3).default("EUR"),
   supplier: partySchema,
   buyer: partySchema.partial().optional(),
-  lines: z.array(lineSchema),
-  taxGroups: z.array(taxGroupSchema),
+  lines: z.array(lineSchema).max(200),
+  taxGroups: z.array(taxGroupSchema).max(10),
   totals: z.object({ netCents: cents, taxCents: cents, grossCents: cents }),
   /** Free text printed on the invoice: payment terms, "Steuerschuldnerschaft des Leistungsempfängers", guests. */
-  notes: z.array(z.string()).default([]),
+  notes: z.array(z.string().max(1000)).max(20).default([]),
 });
 
 export type Beleg = z.infer<typeof belegSchema>;

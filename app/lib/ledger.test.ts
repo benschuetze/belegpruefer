@@ -7,7 +7,7 @@ import type { BookingLine, KontiererOutput } from "./agents/kontierer";
 import { bookings, documents, reviews } from "./db/schema";
 import { DEMO_TENANTS } from "./db/seed";
 import { storeUpload } from "./documents.server";
-import { confirmDocument, LedgerError, lockPeriod, reverseAndRebook } from "./ledger.server";
+import { bookingsInPeriod, confirmDocument, LedgerError, lockPeriod, reverseAndRebook } from "./ledger.server";
 import { processDocument } from "./process.server";
 
 const lines = (x: { satz: number; konto: string; buSchluessel: string }[]) => x as BookingLine[];
@@ -120,6 +120,32 @@ describe("Festschreiben und Storno", () => {
       ]),
     );
     expect(byAccount).toEqual({ "4930": 0, "3400": 11864, "4940": 2996 });
+  });
+
+  it("Storno und neue Buchung landen im laufenden Zeitraum; der festgeschriebene bleibt, wie er exportiert wurde", async () => {
+    const { db, id } = await setup();
+    await lockPeriod(db, A, "2026-09-01", "2026-09-30");
+    const september = await bookingsInPeriod(db, A, "2026-09-01", "2026-09-30");
+    await reverseAndRebook(db, A, id, PAPER.zeilen, "Demo", TODAY);
+    expect(await bookingsInPeriod(db, A, "2026-09-01", "2026-09-30")).toEqual(september);
+    const october = await bookingsInPeriod(db, A, "2026-10-01", "2026-10-31");
+    expect(october).toHaveLength(4);
+    expect(october.every((b) => b.bookingDate === TODAY && !b.lockedAt)).toBe(true);
+  });
+
+  it("ein Beleg aus einem festgeschriebenen Monat wird im laufenden Monat gebucht", async () => {
+    const { db } = await createTestDb();
+    await lockPeriod(db, A, "2026-09-01", "2026-09-30");
+    const stored = await storeUpload(
+      db,
+      A,
+      "spaet.xml",
+      readFileSync("app/lib/parser/__fixtures__/xrechnung-papierwerk.xml"),
+    );
+    if (stored.status !== "neu") throw new Error();
+    await processDocument(db, A, stored.id, { models: team(PAPER), research: NO_RESEARCH, today: TODAY });
+    const rows = await db.select().from(bookings).where(eq(bookings.documentId, stored.id));
+    expect(rows.map((b) => b.bookingDate)).toEqual([TODAY, TODAY]);
   });
 
   it("Storno nur für festgeschriebene Belege", async () => {

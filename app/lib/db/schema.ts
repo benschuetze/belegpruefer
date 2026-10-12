@@ -1,4 +1,17 @@
-import { date, index, integer, jsonb, pgEnum, pgTable, real, text, timestamp, unique, uuid } from "drizzle-orm/pg-core";
+import {
+  date,
+  foreignKey,
+  index,
+  integer,
+  jsonb,
+  pgEnum,
+  pgTable,
+  real,
+  text,
+  timestamp,
+  unique,
+  uuid,
+} from "drizzle-orm/pg-core";
 import type { Beleg } from "~/lib/beleg";
 
 /*
@@ -95,6 +108,8 @@ export const documents = pgTable(
     createdAt: createdAt(),
   },
   (t) => [
+    // Target of the composite foreign keys below: a row can only point to a document of its own tenant.
+    unique("documents_tenant_id").on(t.tenantId, t.id),
     unique("documents_tenant_sha256").on(t.tenantId, t.sha256),
     index("documents_tenant_status").on(t.tenantId, t.status),
   ],
@@ -105,9 +120,7 @@ export const bookings = pgTable(
   {
     id: uuid("id").primaryKey().defaultRandom(),
     tenantId: tenantId(),
-    documentId: uuid("document_id")
-      .notNull()
-      .references(() => documents.id),
+    documentId: uuid("document_id").notNull(),
     bookingDate: date("booking_date").notNull(),
     /** Gross amount of this line in cents; negative only for reversals. */
     amountCents: integer("amount_cents").notNull(),
@@ -123,6 +136,7 @@ export const bookings = pgTable(
     createdAt: createdAt(),
   },
   (t) => [
+    foreignKey({ columns: [t.tenantId, t.documentId], foreignColumns: [documents.tenantId, documents.id] }),
     index("bookings_tenant_document").on(t.tenantId, t.documentId),
     index("bookings_tenant_date").on(t.tenantId, t.bookingDate),
   ],
@@ -134,9 +148,7 @@ export const decisions = pgTable(
   {
     id: uuid("id").primaryKey().defaultRandom(),
     tenantId: tenantId(),
-    documentId: uuid("document_id")
-      .notNull()
-      .references(() => documents.id),
+    documentId: uuid("document_id").notNull(),
     /** Several runs of the same document (retry after an error, re-run) are told apart by this. */
     runId: uuid("run_id").notNull(),
     role: decisionRole("role").notNull(),
@@ -152,7 +164,10 @@ export const decisions = pgTable(
     durationMs: integer("duration_ms").notNull().default(0),
     createdAt: createdAt(),
   },
-  (t) => [index("decisions_tenant_document").on(t.tenantId, t.documentId, t.createdAt)],
+  (t) => [
+    foreignKey({ columns: [t.tenantId, t.documentId], foreignColumns: [documents.tenantId, documents.id] }),
+    index("decisions_tenant_document").on(t.tenantId, t.documentId, t.createdAt),
+  ],
 );
 
 /** Append-only like decisions: what a person confirmed or changed, before and after. */
@@ -161,16 +176,17 @@ export const reviews = pgTable(
   {
     id: uuid("id").primaryKey().defaultRandom(),
     tenantId: tenantId(),
-    documentId: uuid("document_id")
-      .notNull()
-      .references(() => documents.id),
+    documentId: uuid("document_id").notNull(),
     userLabel: text("user_label").notNull(),
     result: reviewResult("result").notNull(),
     before: jsonb("before_jsonb"),
     after: jsonb("after_jsonb"),
     createdAt: createdAt(),
   },
-  (t) => [index("reviews_tenant_document").on(t.tenantId, t.documentId)],
+  (t) => [
+    foreignKey({ columns: [t.tenantId, t.documentId], foreignColumns: [documents.tenantId, documents.id] }),
+    index("reviews_tenant_document").on(t.tenantId, t.documentId),
+  ],
 );
 
 export const exports = pgTable(

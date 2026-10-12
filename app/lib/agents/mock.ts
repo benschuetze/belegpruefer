@@ -7,17 +7,21 @@ import type { AgentModels } from "./models";
  */
 const KEYWORDS: [RegExp, string, number][] = [
   [/laptop|notebook/i, "0420", 0.9],
-  [/monitor|bürostuhl|drucker\b/i, "4855", 0.92],
+  [/bürostuhl|regal|schreibtischleuchte|aktenschrank/i, "4855", 0.92],
   [/menü|restaurant|bewirtung|catering|mittagessen|abendessen/i, "4650", 0.86],
   [/sponsored|anzeige|kampagne|werbung|flyer|plakat|ads\b/i, "4600", 0.93],
   [/fachbuch|zeitschrift|abonnement zeitung/i, "4940", 0.94],
   [/lizenz|abo|subscription|saas|cloud/i, "4964", 0.9],
+  [/röster|maschine/i, "4800", 0.86],
   [/wartung|support|reparatur/i, "4806", 0.87],
   [/mobilfunk|telefon/i, "4920", 0.93],
   [/internet|dsl|glasfaser|hosting/i, "4925", 0.92],
-  [/bahn|ticket|hotel|übernachtung|flug/i, "4670", 0.9],
+  // Both demo tenants are corporations: travel goes to 4660 (employees), not 4670.
+  [/bahn|ticket|hotel|übernachtung|flug|taxi/i, "4660", 0.9],
   [/miete/i, "4210", 0.95],
   [/versicherung/i, "4360", 0.95],
+  [/buchführung|lohnbuchhaltung/i, "4955", 0.86],
+  [/jahresabschluss/i, "4957", 0.86],
   [/steuerberatung|rechtsanwalt|beratung/i, "4950", 0.85],
   [/kontoführung|gebühr/i, "4970", 0.9],
   [/rohkaffee|kaffeetüten|verpackung|zum weiterverkauf/i, "3400", 0.9],

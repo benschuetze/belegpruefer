@@ -6,6 +6,9 @@ test.beforeEach(resetDb);
 test("Mandanten sind getrennt: Beleg von A ist bei B weder in der Liste noch per Link erreichbar", async ({ page }) => {
   await page.goto("/");
   await page.getByRole("button", { name: "Feldbach Design GmbH" }).click();
+  // The switch is a form post with a redirect; navigating on before it lands would cancel it.
+  await expect(page.getByRole("button", { name: "Feldbach Design GmbH" })).toHaveAttribute("aria-pressed", "true");
+  await page.waitForLoadState("load");
   await upload(page, [invoiceFile("a.xml", [{ description: "Kopierpapier", netCents: 5000 }])]);
   await page.getByRole("status", { name: "Ergebnis des Uploads" }).getByRole("link", { name: "ansehen" }).click();
   await expect(page).toHaveURL(/\/belege\/[0-9a-f-]{36}$/);
@@ -37,4 +40,16 @@ test("eine Mandanten-ID aus Formular oder URL wird nicht übernommen, wenn sie n
   expect(response.status()).toBe(400);
   await page.goto("/?tenantId=00000000-0000-4000-8000-000000000002");
   await expect(page.getByRole("button", { name: "Feldbach Design GmbH" })).toHaveAttribute("aria-pressed", "true");
+});
+
+test("eine kaputte Beleg-ID ist 404, kein Serverfehler", async ({ page }) => {
+  for (const path of ["/belege/kein-uuid", "/belege/kein-uuid/datei", "/belege/'%3Bdrop"]) {
+    const response = await page.request.get(path);
+    expect(response.status(), path).toBe(404);
+  }
+  const lock = await page.request.post("/belege/kein-uuid", {
+    form: { intent: "passt" },
+    headers: { Origin: "http://127.0.0.1:5299" },
+  });
+  expect(lock.status()).toBe(404);
 });

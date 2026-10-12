@@ -114,7 +114,9 @@ export default function Export() {
       {rows.length === 0 ? (
         <p className="ink-card text-muted-ink">Keine Buchungen in diesem Zeitraum.</p>
       ) : (
-        <div className="ink-card overflow-x-auto p-0">
+        // Scrolls sideways on narrow screens; focusable so the keyboard can scroll it too.
+        // biome-ignore lint/a11y/noNoninteractiveTabindex: a scrollable region must be reachable by keyboard (WCAG 2.1.1, axe scrollable-region-focusable)
+        <section className="ink-card overflow-x-auto p-0" aria-label="Exportzeilen" tabIndex={0}>
           <table className="w-full text-[14px]">
             <caption className="sr-only">Vorschau der Exportzeilen</caption>
             <thead>
@@ -145,7 +147,7 @@ export default function Export() {
               ))}
             </tbody>
           </table>
-        </div>
+        </section>
       )}
     </div>
   );

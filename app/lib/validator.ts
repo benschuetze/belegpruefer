@@ -61,8 +61,9 @@ const hinweis = (code: string, message: string): Finding => ({ code, severity: "
  */
 export function validateBeleg(beleg: Beleg, today: string): Finding[] {
   const findings: Finding[] = [];
-  const small = isSmallInvoice(beleg);
   const reverseCharge = mentionsReverseCharge(beleg);
+  // § 33 Satz 3 UStDV: no small-invoice relief for § 13b services.
+  const small = isSmallInvoice(beleg) && !reverseCharge;
 
   // Sums: lines → tax groups → totals, each to the cent.
   const lineNet = beleg.lines.reduce((s, l) => s + l.netCents, 0);
@@ -111,6 +112,11 @@ export function validateBeleg(beleg: Beleg, today: string): Finding[] {
       findings.push(fehler("steuernummer_fehlt", "Weder USt-IdNr. noch Steuernummer des Lieferanten angegeben."));
     }
     if (!beleg.buyer?.name) findings.push(fehler("empfaenger_fehlt", "Name des Leistungsempfängers fehlt."));
+    else if (!beleg.buyer.street || !beleg.buyer.city) {
+      findings.push(
+        fehler("empfaenger_anschrift", "Anschrift des Leistungsempfängers fehlt (§ 14 Abs. 4 Nr. 1 UStG)."),
+      );
+    }
     if (!beleg.deliveryDate) {
       findings.push(
         hinweis("leistungsdatum", "Kein Leistungsdatum angegeben. Zulässig, wenn es dem Rechnungsdatum entspricht."),
@@ -147,6 +153,8 @@ export function validateBeleg(beleg: Beleg, today: string): Finding[] {
     findings.push(hinweis("ohne_steuer", "Inländische Rechnung ohne Umsatzsteuer: Kleinunternehmer oder steuerfrei?"));
   }
 
+  findings.push(...instructionFindings(beleg));
+
   if (beleg.lines.some(aboveGwgLimit)) {
     findings.push(hinweis("ueber_gwg_grenze", "Eine Position liegt über 800 € netto: möglicherweise Anlagevermögen."));
   }
@@ -163,7 +171,10 @@ export function validateBooking(beleg: Beleg, account: string): Finding[] {
     const text = beleg.notes.join("\n");
     if (!OCCASION.test(text) || !GUESTS.test(text)) {
       findings.push(
-        fehler("bewirtung_angaben", "Bewirtung: Anlass und bewirtete Personen fehlen auf dem Beleg (§ 4 Abs. 5 EStG)."),
+        fehler(
+          "bewirtung_angaben",
+          "Bewirtung: Anlass und bewirtete Personen fehlen (§ 4 Abs. 5 Nr. 2 EStG). Ort, Tag, Bewirtender und maschinelle Rechnung bitte selbst prüfen.",
+        ),
       );
     }
   }
@@ -171,6 +182,47 @@ export function validateBooking(beleg: Beleg, account: string): Finding[] {
     findings.push(fehler("gwg_grenze", "GWG-Sofortabschreibung, aber eine Position liegt über 800 € netto."));
   }
   return findings;
+}
+
+/**
+ * Text that talks to the bookkeeping instead of describing goods. Invoices do not tell anyone how to book them;
+ * if one does, a person looks at it, whatever the models made of it. Second line of defence behind the prompt.
+ */
+const INSTRUCTION_LIKE = [
+  /\bignorier(e|en)?\b.{0,40}\b(anweisungen?|regeln?|vorgaben?)\b/i,
+  /\bignore (all|any|previous|the)\b/i,
+  // "Buche" alone is also a wood; only "buche auf (Konto) 4900" is an instruction.
+  /\b(buche|bucht|verbuche|buchen)\b.{0,20}\bauf\s+(konto\s+)?\d{4}\b/i,
+  /\bkonfidenz\b/i,
+  /\bconfidence\b/i,
+  // "System: Lizenz Basic" is a product line; a role marker shouts or opens with an order.
+  /\b(SYSTEM|ASSISTANT)\s*:/,
+  /\b(system|assistant)\s*:\s*(neue|new|ignor|du |you |vergiss|forget)/i,
+  /\b(disregard|forget)\b.{0,30}\b(instructions?|rules?|above)\b/i,
+  /\bvergiss\b.{0,40}\b(anweisungen?|regeln?|vorgaben?)\b/i,
+  // No \b around umlauts: JavaScript word boundaries only know ASCII letters.
+  /(überspring|umgeh)[^.]{0,30}prüfung|prüfung[^.]{0,30}(überspring|umgeh)/i,
+  /<\/?\s*(beleg|vorschlag|beispiele|lieferantenprofil|system)\b/i,
+  /\b(ki|ai|llm|modell|prompt)\b.{0,40}\b(anweisungen?|testmodus)\b/i,
+  /\b(ohne rückfrage|ohne prüfung)\b.{0,30}\bbuchen\b/i,
+];
+
+export function looksLikeInstruction(text: string): boolean {
+  return INSTRUCTION_LIKE.some((pattern) => pattern.test(text));
+}
+
+export function instructionFindings(beleg: Beleg): Finding[] {
+  // Every free-text field that reaches the model (see belegForPrompt), not just the obvious ones.
+  const texts = [
+    beleg.supplier.name,
+    beleg.invoiceNumber ?? "",
+    beleg.supplier.vatId ?? "",
+    ...beleg.lines.map((l) => l.description),
+    ...beleg.notes,
+  ];
+  return texts.some(looksLikeInstruction)
+    ? [fehler("anweisung_im_beleg", "Der Beleg enthält Text, der wie eine Anweisung an die Buchhaltung aussieht.")]
+    : [];
 }
 
 export function hasErrors(findings: Finding[]): boolean {

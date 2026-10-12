@@ -77,7 +77,7 @@ function amount(node: Node, field: string): number {
   try {
     return parseDecimalCents(raw);
   } catch {
-    throw new ParseError(`${field}: Betrag „${raw}“ ist ungültig`);
+    throw new ParseError(`${field}: Betrag ist ungültig`);
   }
 }
 
@@ -86,7 +86,7 @@ function rate(node: Node, field: string): number {
   if (raw === undefined) return 0;
   const value = Number(raw);
   if (!Number.isFinite(value) || !Number.isInteger(value)) {
-    throw new ParseError(`${field}: Steuersatz „${raw}“ wird nicht unterstützt`);
+    throw new ParseError(`${field}: Steuersatz wird nicht unterstützt (nur ganze Prozent)`);
   }
   return value;
 }
@@ -206,7 +206,8 @@ export function parseInvoiceXml(xml: string): ParseResult {
     const parsed = belegSchema.safeParse(withoutUndefined(candidate));
     if (!parsed.success) {
       const issue = parsed.error.issues[0];
-      return { ok: false, reason: `Pflichtfeld fehlt oder ungültig: ${issue?.path.join(".")} (${issue?.message})` };
+      const reason = issue?.code === "too_big" ? "zu lang oder zu viele Einträge" : issue?.message;
+      return { ok: false, reason: `Pflichtfeld fehlt oder ungültig: ${issue?.path.join(".")} (${reason})` };
     }
     return { ok: true, beleg: parsed.data, profile };
   } catch (error) {

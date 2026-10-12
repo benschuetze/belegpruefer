@@ -1,9 +1,9 @@
-import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, lte, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, gte, inArray, isNotNull, isNull, lte, sql } from "drizzle-orm";
 import type { BookingLine, KontiererOutput } from "~/lib/agents/kontierer";
 import { bookingLineSchema } from "~/lib/agents/kontierer";
-import type { Db } from "~/lib/db/client";
+import type { Db, Tx } from "~/lib/db/client";
 import { bookings, decisions, documents, exports, reviews } from "~/lib/db/schema";
-import { bookingsFor } from "~/lib/process.server";
+import { bookingsFor, lockLedger, openBookingDate } from "~/lib/process.server";
 
 export class LedgerError extends Error {}
 
@@ -34,6 +34,7 @@ export async function confirmDocument(
   const parsed = bookingLineSchema.array().min(1).safeParse(lines);
   if (!parsed.success) throw new LedgerError("Ungültige Kontierung.");
   await db.transaction(async (tx) => {
+    await lockLedger(tx, tenantId);
     const [doc] = await tx
       .select()
       .from(documents)
@@ -61,7 +62,16 @@ export async function confirmDocument(
     await tx.delete(bookings).where(and(eq(bookings.tenantId, tenantId), eq(bookings.documentId, documentId)));
     await tx
       .insert(bookings)
-      .values(bookingsFor(tenantId, documentId, doc.extracted, parsed.data, changed ? "manuell" : "ki", today));
+      .values(
+        bookingsFor(
+          tenantId,
+          documentId,
+          doc.extracted,
+          parsed.data,
+          changed ? "manuell" : "ki",
+          await openBookingDate(tx, tenantId, doc.extracted.issueDate, today),
+        ),
+      );
     await tx.insert(reviews).values({
       tenantId,
       documentId,
@@ -86,16 +96,19 @@ function sameChoices(a: AccountChoice[], b: AccountChoice[]): boolean {
 }
 
 /** Open documents in a period: invoices dated in it that nobody has decided yet. */
-export async function openInPeriod(db: Db, tenantId: string, from: string, to: string): Promise<number> {
+export async function openInPeriod(db: Db | Tx, tenantId: string, from: string, to: string): Promise<number> {
   const issue = sql<string>`${documents.extracted}->>'issueDate'`;
-  return db.$count(
-    documents,
-    and(
-      eq(documents.tenantId, tenantId),
-      inArray(documents.status, ["neu", "verarbeitung", "pruefen", "fehler"]),
-      sql`${issue} between ${from} and ${to}`,
-    ),
-  );
+  const [row] = await db
+    .select({ n: count() })
+    .from(documents)
+    .where(
+      and(
+        eq(documents.tenantId, tenantId),
+        inArray(documents.status, ["neu", "verarbeitung", "pruefen", "fehler"]),
+        sql`${issue} between ${from} and ${to}`,
+      ),
+    );
+  return row?.n ?? 0;
 }
 
 export async function bookingsInPeriod(db: Db, tenantId: string, from: string, to: string) {
@@ -112,9 +125,13 @@ export async function bookingsInPeriod(db: Db, tenantId: string, from: string, t
  */
 export async function lockPeriod(db: Db, tenantId: string, from: string, to: string, now = new Date()) {
   if (from > to) throw new LedgerError("Der Zeitraum ist leer.");
-  const open = await openInPeriod(db, tenantId, from, to);
-  if (open > 0) throw new LedgerError(`${open} Beleg(e) im Zeitraum sind noch offen. Erst prüfen, dann festschreiben.`);
   return db.transaction(async (tx) => {
+    await lockLedger(tx, tenantId);
+    // Checked under the lock: nothing can be booked into the period between this check and the lock below.
+    const open = await openInPeriod(tx, tenantId, from, to);
+    if (open > 0) {
+      throw new LedgerError(`${open} Beleg(e) im Zeitraum sind noch offen. Erst prüfen, dann festschreiben.`);
+    }
     const locked = await tx
       .update(bookings)
       .set({ lockedAt: now })
@@ -165,6 +182,7 @@ export async function reverseAndRebook(
   const parsed = bookingLineSchema.array().min(1).safeParse(lines);
   if (!parsed.success) throw new LedgerError("Ungültige Kontierung.");
   await db.transaction(async (tx) => {
+    await lockLedger(tx, tenantId);
     const [doc] = await tx
       .select()
       .from(documents)
@@ -195,6 +213,7 @@ export async function reverseAndRebook(
         reversalOf: b.id,
       })),
     );
+    // The correction belongs to the period it is made in, like the reversal; the closed period stays as exported.
     await tx.insert(bookings).values(bookingsFor(tenantId, documentId, doc.extracted, parsed.data, "manuell", today));
     await tx.insert(reviews).values({
       tenantId,

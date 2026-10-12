@@ -52,9 +52,9 @@ describe("Entscheidung: automatisch nur, wenn alles passt", () => {
     expect(decide({ beleg: paper, findings: [], kontierer: null, pruefer: agree }).outcome).toBe("pruefen");
   });
 
-  it("Schwelle 0,8: 0,79 prüfen, 0,80 automatisch", () => {
-    expect(decide({ beleg: paper, findings: [], kontierer: proposal("4930", "9", 0.79) }).outcome).toBe("pruefen");
-    expect(decide({ beleg: paper, findings: [], kontierer: proposal("4930", "9", 0.8) }).outcome).toBe("automatisch");
+  it("Schwelle 0,85 (aus dem Eval): 0,84 prüfen, 0,85 automatisch", () => {
+    expect(decide({ beleg: paper, findings: [], kontierer: proposal("4930", "9", 0.84) }).outcome).toBe("pruefen");
+    expect(decide({ beleg: paper, findings: [], kontierer: proposal("4930", "9", 0.85) }).outcome).toBe("automatisch");
   });
 });
 
@@ -114,5 +114,22 @@ describe("Steuerschlüssel prüft der Code, nicht das Modell", () => {
       begruendung: "",
     } as KontiererOutput;
     expect(decide({ beleg: mixed, findings: [], kontierer: both }).outcome).toBe("automatisch");
+  });
+});
+
+describe("Drittland", () => {
+  it("Leistung aus den USA ohne Steuer geht immer zu einem Menschen, egal wie sicher", () => {
+    const us = makeReverseCharge(9900, {
+      supplier: {
+        name: "Cloudforge Inc.",
+        street: "1 Market St",
+        city: "San Francisco",
+        country: "US",
+        vatId: undefined,
+      },
+    });
+    const result = decide({ beleg: us, findings: [], kontierer: proposal("4964", "", 0.99, 0) });
+    expect(result.outcome).toBe("pruefen");
+    expect(result.reasons.join()).toMatch(/Drittland/);
   });
 });

@@ -19,7 +19,11 @@ export const EXPENSE_ACCOUNTS = [
   { number: "4360", name: "Versicherungen" },
   { number: "4600", name: "Werbekosten" },
   { number: "4650", name: "Bewirtungskosten", risk: true },
+  // GmbH and UG have no "Unternehmer" in this sense: their managing director travels as an employee (4660).
+  { number: "4660", name: "Reisekosten Arbeitnehmer" },
   { number: "4670", name: "Reisekosten Unternehmer" },
+  { number: "4800", name: "Reparaturen und Instandhaltung von technischen Anlagen und Maschinen" },
+  { number: "4805", name: "Reparaturen und Instandhaltung von Betriebs- und Geschäftsausstattung" },
   { number: "4806", name: "Wartungskosten für Hard- und Software" },
   { number: "4855", name: "Sofortabschreibung geringwertiger Wirtschaftsgüter", risk: true },
   { number: "4920", name: "Telefon" },
@@ -27,6 +31,8 @@ export const EXPENSE_ACCOUNTS = [
   { number: "4930", name: "Bürobedarf" },
   { number: "4940", name: "Zeitschriften, Bücher" },
   { number: "4950", name: "Rechts- und Beratungskosten" },
+  { number: "4955", name: "Buchführungskosten", checkBeforeUse: true },
+  { number: "4957", name: "Abschluss- und Prüfungskosten", checkBeforeUse: true },
   {
     number: "4964",
     name: "Aufwendungen für die zeitlich befristete Überlassung von Rechten (Lizenzen, Software-Abos)",

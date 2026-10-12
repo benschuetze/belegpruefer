@@ -1,13 +1,16 @@
 import type { BookingLine, KontiererOutput } from "~/lib/agents/kontierer";
 import { coversTaxGroups } from "~/lib/agents/kontierer";
 import type { PrueferOutput } from "~/lib/agents/pruefer";
-import { type Beleg, isForeignEu, mentionsReverseCharge } from "~/lib/beleg";
+import { type Beleg, isForeignEu, mentionsReverseCharge, supplierCountry } from "~/lib/beleg";
 import type { Finding } from "~/lib/db/schema";
 import { accountByNumber, REVERSE_CHARGE_KEY, taxKeyForRate } from "~/lib/skr03";
 import { hasErrors, validateBooking } from "~/lib/validator";
 
-/** Start values from the briefing; `evals/` measures where they should be and the README explains the choice. */
-export const DEFAULT_THRESHOLDS = { normal: 0.8, risk: 0.9 };
+/**
+ * From the eval (evals/ergebnis.json, README "Eval"): every wrong account had a confidence of 0.80 or less, so the
+ * normal threshold sits at 0.85 instead of the starting 0.8. Risk accounts keep 0.9.
+ */
+export const DEFAULT_THRESHOLDS = { normal: 0.85, risk: 0.9 };
 export type Thresholds = typeof DEFAULT_THRESHOLDS;
 
 export type DecisionInput = {
@@ -56,6 +59,11 @@ export function decide(input: DecisionInput): Outcome {
   const bookingFindings: Finding[] = [];
 
   if (hasErrors(input.findings)) reasons.push("Der Validator hat Fehler auf dem Beleg gefunden.");
+
+  // A service from outside the EU without German VAT is § 13b (2) UStG; its tax key is not one this app sets alone.
+  if (supplierCountry(input.beleg) !== "DE" && !isForeignEu(input.beleg) && input.beleg.totals.taxCents === 0) {
+    reasons.push("Leistung aus einem Drittland ohne deutsche Steuer: den Steuerschlüssel legt ein Mensch fest.");
+  }
 
   const proposal = input.kontierer;
   if (!proposal) {

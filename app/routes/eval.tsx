@@ -25,6 +25,8 @@ type Result = {
   models: Record<string, string>;
   variants: Variant[];
   threshold?: { normal: number; risk: number; reason: string };
+  fazit?: string[];
+  extraction?: { model: string; documents: number; allFieldsRight: number; costCentsPerDoc: number };
 };
 
 export function loader() {
@@ -63,7 +65,9 @@ export default function Eval() {
                 .join(", ")}
             </p>
           </section>
-          <div className="ink-card overflow-x-auto p-0">
+          {/* Scrolls sideways on narrow screens; focusable so the keyboard can scroll it too. */}
+          {/* biome-ignore lint/a11y/noNoninteractiveTabindex: a scrollable region must be reachable by keyboard (WCAG 2.1.1, axe scrollable-region-focusable) */}
+          <section className="ink-card overflow-x-auto p-0" aria-label="Ablationstabelle" tabIndex={0}>
             <table className="w-full text-[14px]">
               <caption className="sr-only">Ablation der vier Aufstellungen</caption>
               <thead>
@@ -97,7 +101,7 @@ export default function Eval() {
                 ))}
               </tbody>
             </table>
-          </div>
+          </section>
           <section className="ink-card max-w-xl space-y-1">
             <h2 className="text-[20px]">Kalibrierung ({full.label})</h2>
             {full.calibration.map((b) => (
@@ -106,7 +110,31 @@ export default function Eval() {
               </LedgerLine>
             ))}
           </section>
-          {data.threshold ? <p className="note max-w-2xl">{data.threshold.reason}</p> : null}
+          {data.fazit?.length ? (
+            <section className="max-w-2xl space-y-2">
+              <h2 className="text-[20px]">Fazit</h2>
+              {data.fazit.map((f) => (
+                <p key={f}>{f}</p>
+              ))}
+            </section>
+          ) : null}
+          {data.threshold ? (
+            <section className="max-w-2xl space-y-2">
+              <h2 className="text-[20px]">
+                Schwelle {data.threshold.normal.toLocaleString("de-DE")} (Risikokonten{" "}
+                {data.threshold.risk.toLocaleString("de-DE")})
+              </h2>
+              <p>{data.threshold.reason}</p>
+            </section>
+          ) : null}
+          {data.extraction ? (
+            <p className="max-w-2xl text-[14px] text-muted-ink">
+              PDF-Extraktion ({data.extraction.model}): {data.extraction.allFieldsRight} von {data.extraction.documents}{" "}
+              erfundenen Rechnungen mit allen Feldern richtig gelesen,{" "}
+              {data.extraction.costCentsPerDoc.toLocaleString("de-DE", { maximumFractionDigits: 2 })} ct je Beleg.
+            </p>
+          ) : null}
+          {data.note ? <p className="note max-w-2xl">{data.note}</p> : null}
         </>
       )}
     </div>

@@ -3,12 +3,12 @@ import { and, eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { makeBeleg } from "../../tests/helpers/belege";
 import { createTestDb } from "../../tests/helpers/db";
-import { AGREE, NO_RESEARCH, team } from "../../tests/helpers/models";
+import { AGREE, fixedModel, NO_RESEARCH, team } from "../../tests/helpers/models";
 import { bookings, decisions, documents, suppliers } from "./db/schema";
 import { DEMO_TENANTS } from "./db/seed";
 import { storeUpload } from "./documents.server";
 import { buildCiiXml } from "./parser/build-cii";
-import { processDocument } from "./process.server";
+import { processDocument, supplierHistory } from "./process.server";
 
 const A = DEMO_TENANTS[0].id;
 const B = DEMO_TENANTS[1].id;
@@ -202,6 +202,29 @@ describe("Mandantentrennung", () => {
   });
 });
 
+describe("Mandantentrennung in der Datenbank", () => {
+  it("eine Buchung, ein Protokolleintrag oder eine Review kann nicht auf den Beleg eines anderen Mandanten zeigen", async () => {
+    const { db } = await createTestDb();
+    const idA = await upload(db, A);
+    const row = { tenantId: B, documentId: idA, runId: idA, role: "validator" as const };
+    await expect(db.insert(decisions).values(row)).rejects.toThrow();
+    await expect(
+      db.insert(bookings).values({
+        tenantId: B,
+        documentId: idA,
+        bookingDate: TODAY,
+        amountCents: 100,
+        account: "4930",
+        contraAccount: "1600",
+        taxKey: "9",
+        text: "x",
+        reference: "x",
+        source: "manuell",
+      }),
+    ).rejects.toThrow();
+  });
+});
+
 describe("Protokoll ist nur anhängend", () => {
   it("UPDATE und DELETE auf decisions lehnt die Datenbank ab", async () => {
     const { db } = await createTestDb();
@@ -209,6 +232,8 @@ describe("Protokoll ist nur anhängend", () => {
     await processDocument(db, A, id, { models: team(PAPER), research: NO_RESEARCH, today: TODAY });
     await expect(db.update(decisions).set({ model: "anders" })).rejects.toThrow();
     await expect(db.delete(decisions)).rejects.toThrow();
+    await expect(db.execute(sql`truncate decisions`)).rejects.toThrow();
+    await expect(db.execute(sql`truncate reviews`)).rejects.toThrow();
     expect((await db.select().from(decisions)).length).toBeGreaterThan(0);
   });
 });
@@ -239,5 +264,92 @@ describe("Prompt Injection", () => {
     expect(prompt.match(/<\/beleg>/g)).toHaveLength(1);
     const [doc] = await db.select().from(documents).where(eq(documents.id, stored.id));
     expect(doc?.status).toBe("pruefen");
+  });
+});
+
+describe("PDF über den Extraktor", () => {
+  const pdf = Buffer.from("%PDF-1.7\n% erfundene Testdatei\n");
+  const read = {
+    rechnungsnummer: "PW-77",
+    rechnungsdatum: "2026-09-10",
+    leistungsdatum: null,
+    lieferant: {
+      name: "Papierwerk Sommer KG",
+      strasse: "Mühlenweg 12",
+      plz: "34117",
+      ort: "Kassel",
+      land: "DE",
+      ustId: "DE123456789",
+      steuernummer: null,
+    },
+    empfaenger: { name: "Feldbach Design GmbH", ustId: null },
+    positionen: [{ text: "Kopierpapier", menge: 1, netto: "100.00", steuersatz: 19 }],
+    steuergruppen: [{ satz: 19, netto: "100.00", steuer: "19.00" }],
+    summe: { netto: "100.00", steuer: "19.00", brutto: "119.00" },
+    hinweise: [],
+    konfidenz: {
+      lieferant: 0.98,
+      rechnungsnummer: 0.97,
+      rechnungsdatum: 0.96,
+      positionen: 0.95,
+      summen: 0.99,
+      ustId: 0.94,
+    },
+  };
+  const booking = { zeilen: [{ satz: 19, konto: "4930", buSchluessel: "9" }], konfidenz: 0.93, begruendung: "Papier" };
+
+  it("sicher gelesene PDF läuft durch die gleiche Kette wie XML", async () => {
+    const { db } = await createTestDb();
+    const stored = await storeUpload(db, A, "rechnung.pdf", pdf);
+    if (stored.status !== "neu") throw new Error();
+    const models = { ...team(booking), extraktor: fixedModel("claude-sonnet-5-5", read) };
+    const result = await processDocument(db, A, stored.id, { models, research: NO_RESEARCH, today: TODAY });
+    expect(result.status).toBe("automatisch");
+    const steps = await db.select().from(decisions).where(eq(decisions.documentId, stored.id));
+    expect(steps[0]).toMatchObject({ role: "extraktor", model: "claude-sonnet-5-5", confidence: 0.94 });
+  });
+
+  it("unsicher gelesene PDF (Konfidenz unter 0,8) → prüfen, auch wenn Kontierer und Prüfer sicher sind", async () => {
+    const { db } = await createTestDb();
+    const stored = await storeUpload(db, A, "unscharf.pdf", pdf);
+    if (stored.status !== "neu") throw new Error();
+    const unsure = { ...read, konfidenz: { ...read.konfidenz, summen: 0.55 } };
+    const models = { ...team(booking), extraktor: fixedModel("claude-sonnet-5-5", unsure) };
+    const result = await processDocument(db, A, stored.id, { models, research: NO_RESEARCH, today: TODAY });
+    expect(result.status).toBe("pruefen");
+  });
+
+  it("Extraktor ohne verwertbare Antwort → fehler mit Grund, nichts gebucht", async () => {
+    const { db } = await createTestDb();
+    const stored = await storeUpload(db, A, "kaputt.pdf", pdf);
+    if (stored.status !== "neu") throw new Error();
+    const models = { ...team(booking), extraktor: fixedModel("claude-sonnet-5-5", { unsinn: true }) };
+    const result = await processDocument(db, A, stored.id, { models, research: NO_RESEARCH, today: TODAY });
+    expect(result.status === "fehler" && result.error).toMatch(/PDF nicht lesbar/);
+    expect(await db.select().from(bookings)).toEqual([]);
+  });
+});
+
+describe("Historie für Beispiele und Recherche", () => {
+  it("nur derselbe Lieferant zählt, nicht jeder mit dem gleichen ersten Wort", async () => {
+    const { db } = await createTestDb();
+    const hotel = (name: string) =>
+      Buffer.from(
+        buildCiiXml(
+          makeBeleg([{ description: "Übernachtung", netCents: 10000, taxRate: 7 }], {
+            invoiceNumber: name.slice(-1),
+            supplier: { name, street: "Kai 1", city: "Kiel", country: "DE", vatId: "DE867423158" },
+          }),
+        ),
+      );
+    const booking = { zeilen: [{ satz: 7, konto: "4670", buSchluessel: "8" }], konfidenz: 0.95, begruendung: "Hotel" };
+    const stored = await storeUpload(db, A, "a.xml", hotel("Hotel Am Hafen A"));
+    if (stored.status !== "neu") throw new Error();
+    await processDocument(db, A, stored.id, { models: team(booking), research: NO_RESEARCH, today: TODAY });
+    await db.update(documents).set({ status: "bestaetigt" }).where(eq(documents.id, stored.id));
+
+    expect(await supplierHistory(db, A, "hotel am hafen a")).toHaveLength(1);
+    expect(await supplierHistory(db, A, "Hotel Am Hafen B")).toHaveLength(0);
+    expect(await supplierHistory(db, B, "Hotel Am Hafen A")).toHaveLength(0);
   });
 });
