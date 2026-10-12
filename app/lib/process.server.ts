@@ -2,11 +2,10 @@ import { randomUUID } from "node:crypto";
 import { and, desc, eq, ilike, inArray } from "drizzle-orm";
 import { extractPdf } from "~/lib/agents/extraktor";
 import type { BookingLine, Example, KontiererOutput } from "~/lib/agents/kontierer";
-import { runKontierer } from "~/lib/agents/kontierer";
 import type { AgentModels } from "~/lib/agents/models";
 import { PROMPT_VERSIONS } from "~/lib/agents/prompts";
-import { type PrueferOutput, runPruefer } from "~/lib/agents/pruefer";
-import { type RechercheOutput, type ResearchTools, runRecherche } from "~/lib/agents/recherche";
+import type { PrueferOutput } from "~/lib/agents/pruefer";
+import type { ResearchTools } from "~/lib/agents/recherche";
 import type { Beleg } from "~/lib/beleg";
 import { takeFromDailyBudget } from "~/lib/daily-budget.server";
 import type { Db } from "~/lib/db/client";
@@ -16,7 +15,6 @@ import {
   documents,
   type Finding,
   type NewBooking,
-  type NewDecision,
   type SupplierProfile,
   suppliers,
   tenants,
@@ -25,18 +23,11 @@ import { DEFAULT_THRESHOLDS, decide, type Outcome, type Thresholds } from "~/lib
 import { parseInvoiceXml } from "~/lib/parser/cii";
 import { safeError } from "~/lib/security.server";
 import { CONTRA_ACCOUNT } from "~/lib/skr03";
+import { FULL_TEAM, plannedCalls, runTeam, type Step, type Team, unknownSupplier } from "~/lib/team";
 import { validateBeleg } from "~/lib/validator";
 
 export const DAILY_LLM_CALLS = Number(process.env.LLM_DAILY_LIMIT ?? 600);
 export const PARALLEL_DOCUMENTS = 3;
-
-export type Team = {
-  /** Eval ablation switches; production runs with all three. */
-  pruefer: boolean;
-  recherche: boolean;
-  examples: boolean;
-};
-export const FULL_TEAM: Team = { pruefer: true, recherche: true, examples: true };
 
 export type ProcessDeps = {
   models: AgentModels | null;
@@ -53,8 +44,6 @@ export type ProcessResult =
 
 /** Document states a human has signed off. Only these count as history and as examples. */
 export const CONFIRMED_STATUSES = ["bestaetigt", "festgeschrieben"] as const;
-
-type Step = Omit<NewDecision, "tenantId" | "documentId" | "runId">;
 
 export function bookingText(beleg: Beleg): string {
   return `${beleg.supplier.name} ${beleg.invoiceNumber ?? ""}`.trim().slice(0, 60);
@@ -200,49 +189,28 @@ export async function processDocument(
       .select()
       .from(suppliers)
       .where(and(eq(suppliers.tenantId, tenantId), eq(suppliers.name, beleg.supplier.name)));
-    const history = await supplierHistory(db, tenantId, beleg.supplier.name);
-    const unknownSupplier = !known?.profile && history.length === 0;
-    const needResearch = team.recherche && unknownSupplier;
-    const calls = 1 + (team.pruefer ? 1 : 0) + (needResearch ? 1 : 0);
-
-    let kontierer: KontiererOutput | null = null;
-    let pruefer: PrueferOutput | null | undefined;
-    let profile: SupplierProfile | null = (known?.profile as SupplierProfile | null) ?? null;
-    let researched: RechercheOutput | null = null;
+    const history = examplesFrom(await supplierHistory(db, tenantId, beleg.supplier.name));
+    const knownProfile = (known?.profile as SupplierProfile | null) ?? null;
+    const calls = plannedCalls(team, unknownSupplier(knownProfile, history));
     const budgetOk =
       deps.models !== null && (await takeFromDailyBudget(db, "llm_calls", calls, DAILY_LLM_CALLS)) === calls;
 
+    let kontierer: KontiererOutput | null = null;
+    let pruefer: PrueferOutput | null | undefined;
+    let profile = knownProfile;
+    let researched = false;
     if (deps.models && budgetOk) {
-      const models = deps.models;
-      if (needResearch) {
-        const research = await runRecherche(models.recherche, beleg, deps.research);
-        researched = research.output;
-        if (researched) {
-          profile = {
-            sells: researched.verkauft,
-            country: researched.land,
-            vatIdValid: researched.ustIdGueltig,
-            summary: researched.zusammenfassung,
-          };
-        }
-        steps.push(agentStep("recherche", research, { lieferant: beleg.supplier.name }));
-      }
-      const examples = team.examples ? examplesFrom(history) : [];
-      const input = { beleg, tenantName: tenant?.name ?? "", examples, profile };
-      const booked = await runKontierer(models.kontierer, input);
-      kontierer = booked.output;
-      steps.push({
-        ...agentStep("kontierer", booked, { examples, profile }),
-        confidence: kontierer?.konfidenz ?? null,
+      const result = await runTeam({
+        models: deps.models,
+        beleg,
+        tenantName: tenant?.name ?? "",
+        history,
+        knownProfile,
+        team,
+        research: deps.research,
       });
-      if (team.pruefer && kontierer) {
-        const reviewed = await runPruefer(models.pruefer, {
-          beleg,
-          proposal: { zeilen: kontierer.zeilen, begruendung: kontierer.begruendung },
-        });
-        pruefer = reviewed.output;
-        steps.push(agentStep("pruefer", reviewed, { zeilen: kontierer.zeilen }));
-      }
+      steps.push(...result.steps);
+      ({ kontierer, pruefer, profile, researched } = result);
     }
 
     // 4. Decide in code.
@@ -250,7 +218,7 @@ export async function processDocument(
       beleg,
       findings,
       kontierer,
-      pruefer: team.pruefer ? (pruefer ?? null) : undefined,
+      pruefer,
       thresholds: deps.thresholds ?? DEFAULT_THRESHOLDS,
     });
     if (!deps.models) outcome.reasons.unshift("Kein KI-Modell eingerichtet.");
@@ -308,31 +276,6 @@ export async function processDocument(
       .where(and(eq(documents.tenantId, tenantId), eq(documents.id, documentId)));
     return { status: "fehler", error: message };
   }
-}
-
-function agentStep(
-  role: "recherche" | "kontierer" | "pruefer",
-  result: {
-    output: unknown;
-    error: string | null;
-    model: string;
-    usage: { inputTokens: number; outputTokens: number };
-    costMicrocents: number;
-    durationMs: number;
-  },
-  input: unknown,
-): Step {
-  return {
-    role,
-    model: result.model,
-    promptVersion: PROMPT_VERSIONS[role],
-    input,
-    output: result.output ?? { error: result.error },
-    tokensIn: result.usage.inputTokens,
-    tokensOut: result.usage.outputTokens,
-    costMicrocents: result.costMicrocents,
-    durationMs: result.durationMs,
-  };
 }
 
 /** Runs documents with at most `limit` at a time: fast enough, and gentle on rate limits and the database. */
