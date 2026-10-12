@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { and, desc, eq, gte, inArray, lte, sql } from "drizzle-orm";
+import { and, count, desc, eq, gte, inArray, lte, sql } from "drizzle-orm";
 import { extractPdf } from "~/lib/agents/extraktor";
 import type { BookingLine, Example, KontiererOutput } from "~/lib/agents/kontierer";
 import type { AgentModels } from "~/lib/agents/models";
@@ -54,13 +54,22 @@ export function bookingText(beleg: Beleg): string {
  * The date a new booking goes under: the invoice date, unless that period is already festgeschrieben. A closed
  * period never gets anything added afterwards, so the export of that period stays exactly as it was.
  */
-export async function openBookingDate(db: Db | Tx, tenantId: string, issueDate: string | undefined, today: string) {
+export async function openBookingDate(tx: Tx, tenantId: string, issueDate: string | undefined, today: string) {
   if (!issueDate) return today;
-  const closed = await (db as Db).$count(
-    exports,
-    and(eq(exports.tenantId, tenantId), lte(exports.periodFrom, issueDate), gte(exports.periodTo, issueDate)),
-  );
-  return closed > 0 ? today : issueDate;
+  const [row] = await tx
+    .select({ n: count() })
+    .from(exports)
+    .where(and(eq(exports.tenantId, tenantId), lte(exports.periodFrom, issueDate), gte(exports.periodTo, issueDate)));
+  return (row?.n ?? 0) > 0 ? today : issueDate;
+}
+
+/**
+ * Serialises everything that writes bookings for one tenant (processing, confirming, reversing, locking a period)
+ * until the transaction ends. Without it, a document could check "period still open" while a parallel
+ * Festschreiben closes it, and land unlocked in a period that was already exported.
+ */
+export async function lockLedger(tx: Tx, tenantId: string): Promise<void> {
+  await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${tenantId}, 0))`);
 }
 
 export function bookingsFor(
@@ -251,6 +260,7 @@ export async function processDocument(
     // 5. Write everything at once.
     const runId = randomUUID();
     await db.transaction(async (tx) => {
+      await lockLedger(tx, tenantId);
       await tx.insert(decisions).values(steps.map((s) => ({ ...s, tenantId, documentId, runId })));
       await tx
         .insert(suppliers)

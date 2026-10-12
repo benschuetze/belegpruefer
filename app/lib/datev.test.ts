@@ -93,6 +93,8 @@ describe("DATEV-Buchungsstapel", () => {
     expect(buchungstext("+1+1")).toBe("1+1");
     expect(buchungstext("@SUM(A1)")).toBe("SUM(A1)");
     expect(buchungstext("Papier - Ordner")).toBe("Papier - Ordner");
+    expect(buchungstext("-5 % Rabatt Papierwerk")).toBe("-5 % Rabatt Papierwerk");
+    expect(buchungstext("-cmd|' /C calc'!A0")).toBe("cmd|' /C calc'!A0");
   });
 
   it("Belegfeld 1 nur erlaubte Zeichen, höchstens 36", () => {

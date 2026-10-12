@@ -1,6 +1,7 @@
 /**
- * One tiny real call per agent role that books, so a wrong key, workspace, model id or output format shows up at
- * build time and not on the first upload. Skipped for the mock (demo, tests) and without a key.
+ * One tiny real call each for booker and reviewer, so a wrong key, workspace, model id or output format shows up
+ * in the deploy (vercel.json buildCommand) and not on the first upload. Skipped for the mock (demo, tests) and
+ * without a key. Two calls for well under a cent, outside the daily budget on purpose: it runs once per deploy.
  */
 import "dotenv/config";
 import { runKontierer } from "~/lib/agents/kontierer";

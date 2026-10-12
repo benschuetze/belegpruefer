@@ -37,16 +37,19 @@ export function belegfeld(value: string): string {
 }
 
 /**
- * Up to 60 characters, one line. A leading = + - @ is removed: the text comes from the invoice, and a spreadsheet
+ * Up to 60 characters, one line. A leading = + @ (and - before a letter) is removed: the text comes from the invoice, and a spreadsheet
  * opening the export would run "=HYPERLINK(…)" as a formula. DATEV itself does not care.
  */
 export function buchungstext(value: string): string {
-  return value
-    .replace(/[\r\n\t]+/g, " ")
-    .trim()
-    .replace(/^[=+\-@]+/, "")
-    .trim()
-    .slice(0, 60);
+  return (
+    value
+      .replace(/[\r\n\t]+/g, " ")
+      .trim()
+      // "-5 % Rabatt" stays: a minus before a digit or space is text, "-cmd|…" is not.
+      .replace(/^(?:[=+@]|-(?=[^\d\s]))+/, "")
+      .trim()
+      .slice(0, 60)
+  );
 }
 
 type Options = { tenant: Tenant; from: string; to: string; createdAt: Date; locked: boolean };

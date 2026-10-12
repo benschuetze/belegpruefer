@@ -17,6 +17,10 @@ export const DEMO_URL = "http://127.0.0.1:5298";
  * mode ordinary triggers do not fire, which only a superuser of a throwaway test database may switch on.
  */
 export async function resetDb(): Promise<void> {
+  // Truncates everything: only ever against the throwaway database of a test run, never a real one.
+  const host = new URL(process.env.DATABASE_URL ?? "").hostname;
+  if (host !== "127.0.0.1" && host !== "localhost")
+    throw new Error(`resetDb verweigert: ${host} ist keine Testdatenbank`);
   const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL, max: 1 });
   try {
     await pool.query("set session_replication_role = replica");

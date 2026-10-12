@@ -186,7 +186,13 @@ const INSTRUCTION_LIKE = [
   /\b(buche|bucht|verbuche|buchen)\b.{0,20}\bauf\s+(konto\s+)?\d{4}\b/i,
   /\bkonfidenz\b/i,
   /\bconfidence\b/i,
-  /\b(system|assistant)\s*:/i,
+  // "System: Lizenz Basic" is a product line; a role marker shouts or opens with an order.
+  /\b(SYSTEM|ASSISTANT)\s*:/,
+  /\b(system|assistant)\s*:\s*(neue|new|ignor|du |you |vergiss|forget)/i,
+  /\b(disregard|forget)\b.{0,30}\b(instructions?|rules?|above)\b/i,
+  /\bvergiss\b.{0,40}\b(anweisungen?|regeln?|vorgaben?)\b/i,
+  // No \b around umlauts: JavaScript word boundaries only know ASCII letters.
+  /(überspring|umgeh)[^.]{0,30}prüfung|prüfung[^.]{0,30}(überspring|umgeh)/i,
   /<\/?\s*(beleg|vorschlag|beispiele|lieferantenprofil|system)\b/i,
   /\b(ki|ai|llm|modell|prompt)\b.{0,40}\b(anweisungen?|testmodus)\b/i,
   /\b(ohne rückfrage|ohne prüfung)\b.{0,30}\bbuchen\b/i,
