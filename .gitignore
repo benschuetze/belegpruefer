@@ -1,0 +1,15 @@
+node_modules/
+build/
+.react-router/
+.vercel/
+.env
+.env.*
+!.env.example
+.DS_Store
+coverage/
+playwright-report/
+test-results/
+.pglite/
+playwright/.auth/
+# Lokale Notizen
+STAND.md
