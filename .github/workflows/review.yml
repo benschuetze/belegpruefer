@@ -21,6 +21,9 @@ jobs:
     timeout-minutes: 15
     env:
       HAS_KEY: ${{ secrets.ANTHROPIC_API_KEY != '' }}
+      # Keys that span several workspaces are refused unless each request names the workspace. The action's
+      # anthropic_workspace_id input only applies to workload identity federation, so the header goes in directly.
+      ANTHROPIC_CUSTOM_HEADERS: "anthropic-workspace-id: ${{ vars.ANTHROPIC_WORKSPACE_ID }}"
     steps:
       - name: Schlüssel vorhanden?
         if: env.HAS_KEY != 'true'
@@ -48,8 +51,6 @@ jobs:
         uses: anthropics/claude-code-action@1d6de8cb0c237e7c15e9e1bdf973826ebae490cc # v1.0.248
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-          # Keys that span several workspaces are refused unless each request names the workspace.
-          anthropic_workspace_id: ${{ vars.ANTHROPIC_WORKSPACE_ID }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
           use_sticky_comment: true
           # The repo is private; without this, an API error (key, workspace, model) is reported only as "is_error".
