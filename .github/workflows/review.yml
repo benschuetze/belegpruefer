@@ -19,7 +19,12 @@ jobs:
     if: github.event.pull_request.draft == false
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    env:
+      HAS_KEY: ${{ secrets.ANTHROPIC_API_KEY != '' }}
     steps:
+      - name: Schlüssel vorhanden?
+        if: env.HAS_KEY != 'true'
+        run: echo "::notice title=Review übersprungen::ANTHROPIC_API_KEY ist im Repo nicht gesetzt."
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
@@ -39,7 +44,8 @@ jobs:
           if git diff --name-only "$BASE" HEAD | grep -qE '^(\.claude/agents/|CLAUDE\.md|\.github/workflows/review\.yml)'; then
             echo "::warning title=Review-Regeln geändert::Dieser PR ändert die Anweisungen des Reviewers. Die Review nutzt die Fassung vom Basis-Branch; die Änderung selbst braucht eine menschliche Durchsicht."
           fi
-      - uses: anthropics/claude-code-action@1d6de8cb0c237e7c15e9e1bdf973826ebae490cc # v1.0.248
+      - if: env.HAS_KEY == 'true'
+        uses: anthropics/claude-code-action@1d6de8cb0c237e7c15e9e1bdf973826ebae490cc # v1.0.248
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
