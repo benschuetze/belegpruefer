@@ -100,9 +100,11 @@ _Noch nicht gemessen._ `pnpm eval` ruft das echte Modell und kostet Guthaben; es
 
 **Datenbanktreiber und Transaktionen.** Die Verarbeitung eines Belegs schreibt Protokoll, Lieferant, Buchung und Status in einer interaktiven Transaktion; Bestätigen und Storno ebenso. Der HTTP-Treiber von Neon (`neon-http`) kann keine Transaktion über mehrere Anweisungen offen halten (nur Batches ohne Zwischenergebnisse). Deshalb läuft die App über `drizzle-orm/neon-serverless` mit `Pool` (WebSocket). Lesen über HTTP wäre etwas schneller, aber ein zweiter Treiber hieße zwei Verhaltensweisen; bei diesen Datenmengen lohnt das nicht. Lokal und in CI läuft `node-postgres`, in Tests PGlite.
 
-**Mandantentrennung.** Eine Instanz, viele Mandanten, Trennung in der Anwendung: Mandant nur aus der Session, `tenantId` als erster Parameter jeder Funktion, jeder Index beginnt mit `tenant_id`, Tests für fremde IDs (Seite, Datei, Aktion, Beispiele für den Kontierer). Row Level Security mit `set_config('app.tenant_id', …)` wäre die zweite Linie in der Datenbank; noch nicht umgesetzt.
+**Mandantentrennung.** Eine Instanz, viele Mandanten, Trennung in der Anwendung: Mandant nur aus der Session, `tenantId` als erster Parameter jeder Funktion, jeder Index beginnt mit `tenant_id`, Tests für fremde IDs (Seite, Datei, Aktion, Beispiele für den Kontierer). In der Datenbank zeigen Buchungen, Protokoll und Reviews über zusammengesetzte Fremdschlüssel `(tenant_id, document_id)` auf den Beleg; eine Zeile kann also nicht auf den Beleg eines anderen Mandanten verweisen. Row Level Security mit `set_config('app.tenant_id', …)` wäre die nächste Linie; noch nicht umgesetzt.
 
-**Protokoll und Festschreibung in der Datenbank.** Append-only und „festgeschrieben ist endgültig“ prüft nicht nur der Code, sondern ein Trigger. Ein Fehler im Code oder ein Handgriff in der Datenbank kann die Geschichte nicht umschreiben.
+**Protokoll und Festschreibung in der Datenbank.** Append-only und „festgeschrieben ist endgültig“ prüft nicht nur der Code, sondern ein Trigger (auch gegen `TRUNCATE`). Ein Fehler im Code oder ein Handgriff in der Datenbank kann die Geschichte nicht umschreiben. Was nach dem Festschreiben eines Zeitraums noch gebucht wird (Storno, Korrektur, ein verspäteter Beleg), landet im laufenden Zeitraum; der exportierte bleibt Zeile für Zeile, wie er war.
+
+**Prompt Injection, zwei Linien.** Erstens geht Belegtext nur als abgegrenzte Daten an die Modelle. Zweitens erkennt der Validator Text, der wie eine Anweisung an die Buchhaltung aussieht („buche auf 4900“, „Konfidenz 1“, „SYSTEM:“, ein schließendes `</beleg>`), in jedem Freitextfeld; so ein Beleg geht immer zu einem Menschen, auch wenn beide Agenten der Anweisung folgen würden. Ein Test spielt genau diesen schlimmsten Fall für alle Injection-Belege des Eval-Sets durch.
 
 **Prüfer auf anderem Modell.** Zwei Aufrufe desselben Modells teilen dessen blinde Flecken. Der Prüfer läuft auf einem stärkeren Modell und sieht die Konfidenz des Kontierers nicht, damit er die Buchung beurteilt und nicht die Selbsteinschätzung.
 
@@ -120,13 +122,30 @@ Vor einem echten Einsatz von einer Steuerberaterin prüfen lassen:
 
 - Nur Eingangsrechnungen, nur SKR03, nur EUR, nur CII (kein UBL), keine Gutschriften.
 - Keine Bankanbindung, kein Zahlungsabgleich. Gegenkonto ist immer 1600.
-- Ein Passwort pro Instanz, keine Benutzerverwaltung; in der Demo wählt ein Umschalter den Mandanten.
+- Ein Passwort pro Instanz, keine Benutzerverwaltung; in der Demo wählt ein Umschalter den Mandanten. Sessions sind zustandslose, signierte Cookies: Abmelden löscht das Cookie, eine kopierte Session bleibt aber bis zu sieben Tage gültig; widerrufen lassen sich alle nur über ein neues Passwort. Die Login-Bremse zählt je IP (fünf Versuche in 15 Minuten), damit niemand den Inhaber global aussperren kann.
 - Dateien in der Datenbank statt in einem Objektspeicher.
 - Handy: lesbar ab 375 px, nicht dafür optimiert.
 
 ## Arbeitsweise mit Agenten
 
-Das Repo wurde mit Claude Code gebaut. In `.claude/` liegen Skills (`verify`, `db-change`, `agent-eval`, `e-ink-design`, `ship`) und drei Review-Agenten (`code-reviewer`, `security-reviewer`, `tax-reviewer`). Jeder PR bekommt über die Claude-Code-GitHub-Action eine Review durch `code-reviewer` und `security-reviewer`. _Echte Befunde mit Links folgen, sobald PRs gelaufen sind._
+Das Repo wurde mit Claude Code gebaut. In `.claude/` liegen Skills (`verify`, `db-change`, `agent-eval`, `e-ink-design`, `ship`) und drei Review-Agenten (`code-reviewer`, `security-reviewer`, `tax-reviewer`). Jeder PR bekommt über die Claude-Code-GitHub-Action eine Review durch `code-reviewer` und `security-reviewer`; die Anweisungen dafür liest der Workflow vom Basis-Branch, damit ein PR seinen eigenen Reviewer nicht umschreiben kann.
+
+Was die beiden Agenten vor dem ersten PR tatsächlich gefunden haben (lokal über den ganzen Stand, alle behoben, jeweils mit Test):
+
+| Agent | Befund | Folge |
+|---|---|---|
+| security-reviewer | Storno-Neubuchung bekam das Rechnungsdatum und landete offen im schon festgeschriebenen Monat; ein zweiter Export desselben Zeitraums hätte anders ausgesehen. | Buchungen nach dem Festschreiben gehen in den laufenden Zeitraum. |
+| security-reviewer | Login-Sperre global: 30 falsche Versuche von irgendwoher sperrten den Inhaber aus; parallele Anfragen umgingen das Limit je IP. | Erst eintragen, dann zählen; nur noch je IP. |
+| security-reviewer | Fremdschlüssel nur auf `documents.id`: eine Zeile hätte auf den Beleg eines anderen Mandanten zeigen können; `TRUNCATE` umging die Append-only-Trigger. | Zusammengesetzte Fremdschlüssel, Trigger gegen `TRUNCATE`. |
+| security-reviewer | Review-Workflow las seine Regeln aus dem PR selbst. | Regeln vom Basis-Branch, Werkzeuge auf diesen PR beschränkt. |
+| security-reviewer | Keine Größengrenzen: eine 2-MB-Rechnung wäre an jeden Agenten gegangen; Tageslimit zählt nur Aufrufe. Ungültige IDs und Daten ergaben 500 statt 404; Buchungstext konnte in Excel als Formel laufen. | Grenzen im Belegschema, Prüfung von ID und Datum, Formelzeichen am Anfang entfernt. |
+| code-reviewer | Die Recherche zählte als ein Aufruf, macht aber bis zu vier. | Tageslimit rechnet mit der Obergrenze. |
+| code-reviewer | Extraktions-Eval zählte Felder als richtig, wenn gar nichts gelesen wurde und das Feld auf der Rechnung fehlte. | Nichts gelesen ist überall falsch. |
+| code-reviewer | Eval-Runner warf bei der Kostengrenze bezahlte Ergebnisse weg und überschrieb das Extraktionsergebnis. | Zwischenstände werden gespeichert, Ergebnisse zusammengeführt. |
+| code-reviewer | Injection-Erkennung schlug bei „Esstisch Buche massiv“ an und übersah die Rechnungsnummer. | Engere Muster, alle Freitextfelder. |
+| code-reviewer | Historie suchte per erstem Wort des Lieferanten („Hotel …“ fand jedes Hotel). | Nur derselbe Lieferant. |
+
+Bewusst nicht geändert: Abmelden widerruft eine kopierte Session nicht (siehe Grenzen).
 
 ## Lokal starten
 
