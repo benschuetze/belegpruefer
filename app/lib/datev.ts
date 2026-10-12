@@ -36,10 +36,15 @@ export function belegfeld(value: string): string {
   return value.replace(/[^A-Za-z0-9$&%*+\-/]/g, "").slice(0, 36);
 }
 
-/** Up to 60 characters, one line. */
+/**
+ * Up to 60 characters, one line. A leading = + - @ is removed: the text comes from the invoice, and a spreadsheet
+ * opening the export would run "=HYPERLINK(…)" as a formula. DATEV itself does not care.
+ */
 export function buchungstext(value: string): string {
   return value
     .replace(/[\r\n\t]+/g, " ")
+    .trim()
+    .replace(/^[=+\-@]+/, "")
     .trim()
     .slice(0, 60);
 }

@@ -1,4 +1,5 @@
 import { and, asc, count, desc, eq, inArray, sql } from "drizzle-orm";
+import { z } from "zod";
 import type { Db } from "~/lib/db/client";
 import { bookings, type DocumentStatus, decisions, documents, reviews } from "~/lib/db/schema";
 
@@ -96,7 +97,15 @@ export async function listDocuments(db: Db, tenantId: string, filter: Filter) {
   });
 }
 
+const documentId = z.uuid();
+
+/** An id that is not even a UUID cannot exist; answering that before the query keeps it a 404, not a 500. */
+export function isDocumentId(id: string): boolean {
+  return documentId.safeParse(id).success;
+}
+
 export async function documentDetail(db: Db, tenantId: string, id: string) {
+  if (!isDocumentId(id)) return null;
   const [doc] = await db
     .select()
     .from(documents)
@@ -132,6 +141,7 @@ export async function documentDetail(db: Db, tenantId: string, id: string) {
 }
 
 export async function documentFile(db: Db, tenantId: string, id: string) {
+  if (!isDocumentId(id)) return null;
   const [doc] = await db
     .select({ content: documents.content, kind: documents.kind, filename: documents.filename })
     .from(documents)

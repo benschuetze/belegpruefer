@@ -1,7 +1,5 @@
-import { z } from "zod";
+import { isoDate } from "~/lib/beleg";
 import { previousMonth } from "~/lib/dates";
-
-const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 
 /** Period from the query string, falling back to last month. Anything malformed is the fallback, not an error. */
 export function periodFrom(url: URL, today: string): { from: string; to: string } {

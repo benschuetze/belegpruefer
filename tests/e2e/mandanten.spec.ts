@@ -38,3 +38,15 @@ test("eine Mandanten-ID aus Formular oder URL wird nicht übernommen, wenn sie n
   await page.goto("/?tenantId=00000000-0000-4000-8000-000000000002");
   await expect(page.getByRole("button", { name: "Feldbach Design GmbH" })).toHaveAttribute("aria-pressed", "true");
 });
+
+test("eine kaputte Beleg-ID ist 404, kein Serverfehler", async ({ page }) => {
+  for (const path of ["/belege/kein-uuid", "/belege/kein-uuid/datei", "/belege/'%3Bdrop"]) {
+    const response = await page.request.get(path);
+    expect(response.status(), path).toBe(404);
+  }
+  const lock = await page.request.post("/belege/kein-uuid", {
+    form: { intent: "passt" },
+    headers: { Origin: "http://127.0.0.1:5299" },
+  });
+  expect(lock.status()).toBe(404);
+});

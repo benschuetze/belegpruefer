@@ -79,12 +79,22 @@ describe("Ablehnung mit Grund statt halber Daten", () => {
     [
       "Steuersatz 5,5",
       fixture("xrechnung-papierwerk.xml").replace("<ram:RateApplicablePercent>7<", "<ram:RateApplicablePercent>5.5<"),
-      /Steuersatz „5.5“/,
+      /Steuersatz wird nicht unterstützt/,
     ],
     [
       "Lieferant ohne Namen",
       fixture("xrechnung-papierwerk.xml").replace("<ram:Name>Papierwerk Sommer KG</ram:Name>", ""),
       /supplier\.name/,
+    ],
+    [
+      "unmögliches Datum 30.02.",
+      fixture("xrechnung-papierwerk.xml").replace("20260903", "20260230"),
+      /issueDate \(kein gültiges Datum\)/,
+    ],
+    [
+      "riesiger Hinweistext",
+      fixture("xrechnung-papierwerk.xml").replace("Zahlbar innerhalb", "x".repeat(5000)),
+      /notes.*zu lang/,
     ],
     ["Gutschrift", fixture("xrechnung-papierwerk.xml").replace("<ram:TypeCode>380", "<ram:TypeCode>381"), /Gutschrift/],
   ])("%s", (_name, xml, reason) => {
@@ -106,5 +116,15 @@ describe("Generator für Test- und Demodaten", () => {
       const again = parsed(buildCiiXml(original, profile));
       expect(again).toEqual(original);
     }
+  });
+});
+
+describe("Gründe enthalten keine Werte aus dem Beleg", () => {
+  it("ein ungültiger Betrag nennt das Feld, nicht den Wert", () => {
+    const result = parseInvoiceXml(
+      fixture("xrechnung-papierwerk.xml").replace("<ram:LineTotalAmount>74.70", "<ram:LineTotalAmount>74.705"),
+    );
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.reason).not.toContain("74.705");
   });
 });
