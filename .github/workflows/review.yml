@@ -1,9 +1,10 @@
 name: Review
 
 # Claude reviews every PR with the two review agents from .claude/agents and posts one comment.
+# Once when the PR opens, and again on demand with the label "review": each run costs credits, so not on every push.
 on:
   pull_request:
-    types: [opened, synchronize, ready_for_review]
+    types: [opened, ready_for_review, labeled]
 
 permissions:
   contents: read
@@ -16,7 +17,9 @@ concurrency:
 
 jobs:
   review:
-    if: github.event.pull_request.draft == false
+    if: >-
+      github.event.pull_request.draft == false &&
+      (github.event.action != 'labeled' || github.event.label.name == 'review')
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
