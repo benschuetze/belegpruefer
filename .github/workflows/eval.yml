@@ -28,6 +28,7 @@ jobs:
       - run: pnpm eval $EVAL_ARGS | tee -a "$GITHUB_STEP_SUMMARY"
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          ANTHROPIC_WORKSPACE_ID: ${{ vars.ANTHROPIC_WORKSPACE_ID }}
           EVAL_ARGS: ${{ inputs.args }}
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:

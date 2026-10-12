@@ -48,6 +48,8 @@ jobs:
         uses: anthropics/claude-code-action@1d6de8cb0c237e7c15e9e1bdf973826ebae490cc # v1.0.248
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          # Keys that span several workspaces are refused unless each request names the workspace.
+          anthropic_workspace_id: ${{ vars.ANTHROPIC_WORKSPACE_ID }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
           use_sticky_comment: true
           # The repo is private; without this, an API error (key, workspace, model) is reported only as "is_error".
