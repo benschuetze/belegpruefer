@@ -21,7 +21,9 @@
     "db:seed": "tsx scripts/seed.ts",
     "db:local": "tsx scripts/local-db.ts",
     "eval": "tsx evals/run.ts",
-    "security:osv": "tsx scripts/osv-check.ts"
+    "security:osv": "tsx scripts/osv-check.ts",
+    "eval:pdf": "tsx evals/run-pdf.ts",
+    "eval:pdfs-erzeugen": "tsx evals/make-pdfs.ts"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^4.0.78",
