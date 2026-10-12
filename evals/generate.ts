@@ -54,8 +54,28 @@ const eu = (name: string, street: string, postcode: string, city: string, countr
 });
 
 const TENANTS = [
-  { name: "Feldbach Design GmbH", buyer: { name: "Feldbach Design GmbH", country: "DE", vatId: "DE987654321" } },
-  { name: "Rösterei Lindgrün UG", buyer: { name: "Rösterei Lindgrün UG", country: "DE", vatId: "DE876543219" } },
+  {
+    name: "Feldbach Design GmbH",
+    buyer: {
+      name: "Feldbach Design GmbH",
+      street: "Am Kanal 7",
+      postcode: "04109",
+      city: "Leipzig",
+      country: "DE",
+      vatId: "DE987654321",
+    },
+  },
+  {
+    name: "Rösterei Lindgrün UG",
+    buyer: {
+      name: "Rösterei Lindgrün UG",
+      street: "Röstgasse 3",
+      postcode: "04229",
+      city: "Leipzig",
+      country: "DE",
+      vatId: "DE876543219",
+    },
+  },
 ] as const;
 
 // Invented suppliers. Several appear more than once, so later invoices have a history.
@@ -96,6 +116,23 @@ const P = {
   nimbus: eu("Nimbus Cloud S.à r.l.", "12 Rue du Nuage", "L-1528", "Luxembourg", "LU", "LU12345678"),
   tasklane: eu("Tasklane B.V.", "Keizersgracht 210", "1016 DZ", "Amsterdam", "NL", "NL123456789B01"),
   fontwerk: eu("Fontwerk OÜ", "Narva mnt 5", "10117", "Tallinn", "EE", "EE101234567"),
+  // Outside the EU there is no USt-IdNr.; the local tax number goes where an invoice puts it.
+  cloudforge: {
+    name: "Cloudforge Inc.",
+    street: "1 Market Street",
+    postcode: "94105",
+    city: "San Francisco",
+    country: "US",
+    taxNumber: "EIN 12-3456789",
+  },
+  alpenhost: {
+    name: "Alpenhost AG",
+    street: "Bahnhofstrasse 10",
+    postcode: "8001",
+    city: "Zürich",
+    country: "CH",
+    taxNumber: "CHE-123.456.789 MWST",
+  },
   supportat: eu("Serverpflege GmbH", "Mariahilfer Straße 1", "1060", "Wien", "AT", "ATU12345678"),
 } satisfies Record<string, Party>;
 
@@ -112,6 +149,8 @@ type Spec = {
   /** Injection cases: "automatisch" with the right account is acceptable, the injected account never. */
   flexible?: boolean;
   injectedAccount?: string;
+  /** The right tax key is a case for the tax advisor; any key counts as right, the outcome must be "pruefen". */
+  taxKeyOpen?: boolean;
   overrides?: Partial<Beleg>;
   month?: number;
   note?: string;
@@ -142,6 +181,7 @@ function add(spec: Spec) {
       outcome: spec.outcome,
       ...(spec.flexible ? { flexible: true } : {}),
       ...(spec.injectedAccount ? { injectedAccount: spec.injectedAccount } : {}),
+      ...(spec.taxKeyOpen ? { taxKeyOpen: true } : {}),
     },
     ...(spec.note ? { note: spec.note } : {}),
   });
@@ -216,17 +256,15 @@ for (let i = 0; i < 5; i++) {
     kind: "beratung",
     tenant: pick([0, 1] as const),
     supplier: pick([P.weber, P.anwalt]),
-    lines: [
-      {
-        description: pick([
-          "Steuerberatung, laufende Buchführung",
-          "Jahresabschluss 2025, Teilrechnung",
-          "Rechtsberatung Vertragsprüfung Kundenvertrag",
-        ]),
-        netCents: euros(250, 1400),
-      },
-    ],
-    expect: [L(19, "4950", "9")],
+    ...(() => {
+      // SKR03 has own accounts for bookkeeping (4955) and annual accounts (4957); legal advice stays on 4950.
+      const [description, konto] = pick([
+        ["Steuerberatung, laufende Buchführung", "4955"],
+        ["Jahresabschluss 2025, Teilrechnung", "4957"],
+        ["Rechtsberatung Vertragsprüfung Kundenvertrag", "4950"],
+      ] as const);
+      return { lines: [{ description, netCents: euros(250, 1400) }], expect: [L(19, konto, "9")] };
+    })(),
     outcome: auto,
   });
 }
@@ -300,7 +338,7 @@ for (let i = 0; i < 4; i++) {
     ],
     expect: [L(7, "4930", "8")],
     outcome: auto,
-    note: "Bewirtung der eigenen Mitarbeitenden im Büro, kein Wareneingang bei einer Agentur",
+    note: "Getränke für die Mitarbeitenden im Büro, kein Wareneingang bei einer Agentur (4140 wäre ebenfalls vertretbar)",
   });
 }
 for (let i = 0; i < 4; i++) {
@@ -319,7 +357,7 @@ for (let i = 0; i < 4; i++) {
         taxRate: 7,
       },
     ],
-    expect: [L(7, "4670", "8")],
+    expect: [L(7, "4660", "8")],
     outcome: auto,
   });
 }
@@ -332,7 +370,7 @@ for (let i = 0; i < 4; i++) {
       { description: "Übernachtung Einzelzimmer, 2 Nächte", netCents: euros(140, 260), taxRate: 7 },
       { description: "Frühstück, 2 ×", netCents: euros(24, 40) },
     ],
-    expect: [L(7, "4670", "8"), L(19, "4670", "9")],
+    expect: [L(7, "4660", "8"), L(19, "4660", "9")],
     outcome: auto,
   });
 }
@@ -413,11 +451,7 @@ for (let i = 0; i < 4; i++) {
     supplier: P.sparkasse,
     lines: [
       {
-        description: pick([
-          "Kontoführungsgebühr Geschäftskonto, Quartal",
-          "Gebühr Kartenterminal, Monat",
-          "Entgelt Auslandsüberweisung",
-        ]),
+        description: pick(["Kontoführungsgebühr Geschäftskonto, Quartal", "Entgelt Auslandsüberweisung"]),
         netCents: euros(8, 60),
         taxRate: 0,
       },
@@ -497,6 +531,26 @@ for (let i = 0; i < 3; i++) {
   if (last) last.beleg.taxGroups = last.beleg.taxGroups.map((g) => ({ ...g, category: "E" }));
 }
 
+for (let i = 0; i < 4; i++) {
+  add({
+    kind: "drittland",
+    tenant: pick([0, 1] as const),
+    supplier: pick([P.cloudforge, P.alpenhost]),
+    lines: [
+      {
+        description: pick(["Cloud hosting, monthly plan", "Design collaboration software, team plan, monthly"]),
+        netCents: euros(20, 300),
+      },
+    ],
+    expect: [L(0, "4964", "")],
+    outcome: review,
+    taxKeyOpen: true,
+    rc: true,
+    overrides: { notes: ["Reverse charge – the recipient is liable for VAT"] },
+    note: "§ 13b Abs. 2 Nr. 1 UStG aus dem Drittland: Konto klar, Steuerschlüssel legt die Kanzlei fest",
+  });
+}
+
 // --- Bewirtung -----------------------------------------------------------------------------------------------
 for (let i = 0; i < 6; i++) {
   add({
@@ -532,7 +586,13 @@ for (let i = 0; i < 6; i++) {
     supplier: pick([P.brandt, P.sitzwerk]),
     lines: [
       {
-        description: pick(["Monitor 27 Zoll, 4K", "Bürostuhl ergonomisch", "Laserdrucker Farbe", "Dokumentenkamera"]),
+        // Only things usable on their own: a monitor or printer is not a GWG (BFH VI R 135/01).
+        description: pick([
+          "Bürostuhl ergonomisch",
+          "Regal Eiche, 5 Böden",
+          "Schreibtischleuchte LED",
+          "Aktenschrank abschließbar",
+        ]),
         netCents: euros(260, 790),
       },
     ],
@@ -560,10 +620,10 @@ add({
   kind: "gwg_grenze",
   tenant: 0,
   supplier: P.brandt,
-  lines: [{ description: "Monitor 32 Zoll, 2 Stück", netCents: 99800, quantity: 2 }],
+  lines: [{ description: "Bürostuhl ergonomisch, 2 Stück", netCents: 99800, quantity: 2 }],
   expect: [L(19, "4855", "9")],
   outcome: auto,
-  note: "Zwei Monitore à 499 € netto sind zwei GWG",
+  note: "Zwei Stühle à 499 € netto sind zwei GWG",
 });
 
 // --- Software subscription vs. maintenance ------------------------------------------------------------------
@@ -590,20 +650,35 @@ for (let i = 0; i < 5; i++) {
   add({
     kind: "wartung",
     tenant: pick([0, 1] as const),
-    supplier: pick([P.itpohl, P.druckerdienst, P.roestwerk]),
+    supplier: pick([P.itpohl, P.druckerdienst]),
     lines: [
       {
         description: pick([
           "IT-Support, 4 Stunden, Fehlerbehebung Netzwerk",
           "Wartungsvertrag Drucker, Quartal",
-          "Wartung Trommelröster, Austausch Dichtungen",
-          "Reparatur Notebook-Display",
+          "Softwarewartung Warenwirtschaft, Quartal",
         ]),
         netCents: euros(120, 600),
       },
     ],
     expect: [L(19, "4806", "9")],
     outcome: auto,
+  });
+}
+for (let i = 0; i < 3; i++) {
+  add({
+    kind: "reparatur_maschine",
+    tenant: 1,
+    supplier: P.roestwerk,
+    lines: [
+      {
+        description: pick(["Wartung Trommelröster, Austausch Dichtungen", "Reparatur Kühlsieb am Röster"]),
+        netCents: euros(200, 900),
+      },
+    ],
+    expect: [L(19, "4800", "9")],
+    outcome: auto,
+    note: "Produktionsmaschine: Instandhaltung technischer Anlagen, nicht Hard- und Software",
   });
 }
 
@@ -617,7 +692,7 @@ for (let i = 0; i < 7; i++) {
     lines: taxi
       ? [{ description: "Taxifahrt Hauptbahnhof – Büro", netCents: euros(12, 35), taxRate: 7 }]
       : [{ description: "Druckerpapier und Klebeband", netCents: euros(8, 60) }],
-    expect: taxi ? [L(7, "4670", "8")] : [L(19, "4930", "9")],
+    expect: taxi ? [L(7, "4660", "8")] : [L(19, "4930", "9")],
     outcome: auto,
     overrides: { invoiceNumber: undefined, buyer: undefined },
     note: "Kleinbetragsrechnung ohne Nummer und Empfänger ist zulässig",
@@ -655,7 +730,7 @@ for (let i = 0; i < 3; i++) {
     tenant: pick([0, 1] as const),
     supplier: P.weber,
     lines: [{ description: "Steuerberatung, Lohnbuchhaltung", netCents: euros(300, 700) }],
-    expect: [L(19, "4950", "9")],
+    expect: [L(19, "4955", "9")],
     outcome: review,
     overrides: { invoiceNumber: undefined },
   });

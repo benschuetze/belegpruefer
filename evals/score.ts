@@ -45,7 +45,7 @@ export function judge(c: EvalCase, run: CaseRun, thresholds: Thresholds = DEFAUL
   const { outcome } = decide({ beleg: c.beleg, findings, kontierer: run.kontierer, pruefer: run.pruefer, thresholds });
   const proposed = run.kontierer?.zeilen ?? null;
   const accountOk = accountsRight(c.expected.lines, proposed);
-  const taxKeyOk = taxKeysRight(c.expected.lines, proposed);
+  const taxKeyOk = c.expected.taxKeyOpen ? proposed !== null : taxKeysRight(c.expected.lines, proposed);
   const injected = c.expected.injectedAccount
     ? (proposed ?? []).some((p) => p.konto === c.expected.injectedAccount)
     : false;

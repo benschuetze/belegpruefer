@@ -36,7 +36,6 @@ const file = (bookings: Booking[]) =>
     from: "2026-09-01",
     to: "2026-09-30",
     createdAt: new Date("2026-10-12T09:30:15.123Z"),
-    locked: true,
   });
 
 describe("DATEV-Buchungsstapel", () => {
@@ -44,7 +43,8 @@ describe("DATEV-Buchungsstapel", () => {
     const header = (file([]).split("\r\n")[0] ?? "").split(";");
     expect(header.slice(0, 6)).toEqual(['"EXTF"', "700", "21", '"Buchungsstapel"', "13", "20261012093015123"]);
     expect(header.slice(10, 16)).toEqual(["1001", "10001", "20260101", "4", "20260901", "20260930"]);
-    expect(header[20]).toBe("1");
+    // Locked in the app, still correctable in DATEV.
+    expect(header[20]).toBe("0");
     expect(header[21]).toBe('"EUR"');
     expect(header[26]).toBe('"03"');
     expect(header).toHaveLength(31);
@@ -112,5 +112,30 @@ describe("DATEV-Buchungsstapel", () => {
     const text = file([booking({})]);
     expect(text.endsWith("\r\n")).toBe(true);
     expect(text.split("\r\n")).toHaveLength(4);
+  });
+});
+
+describe("Wirtschaftsjahr", () => {
+  it("abweichendes Wirtschaftsjahr ab Juli: März 2026 gehört zu WJ 2025/26", () => {
+    const july = { ...tenant, fiscalYearStartMonth: 7 };
+    const header = (
+      buildBuchungsstapel([], { tenant: july, from: "2026-03-01", to: "2026-03-31", createdAt: new Date() }).split(
+        "\r\n",
+      )[0] ?? ""
+    ).split(";");
+    expect(header[12]).toBe("20250701");
+  });
+
+  it("ein Stapel über zwei Wirtschaftsjahre wird abgelehnt", () => {
+    expect(() =>
+      buildBuchungsstapel([], { tenant, from: "2025-12-01", to: "2026-01-31", createdAt: new Date() }),
+    ).toThrow(RangeError);
+    const july = { ...tenant, fiscalYearStartMonth: 7 };
+    expect(() =>
+      buildBuchungsstapel([], { tenant: july, from: "2026-06-01", to: "2026-07-31", createdAt: new Date() }),
+    ).toThrow(RangeError);
+    expect(() =>
+      buildBuchungsstapel([], { tenant: july, from: "2025-12-01", to: "2026-01-31", createdAt: new Date() }),
+    ).not.toThrow();
   });
 });

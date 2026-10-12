@@ -52,10 +52,39 @@ export function buchungstext(value: string): string {
   );
 }
 
-type Options = { tenant: Tenant; from: string; to: string; createdAt: Date; locked: boolean };
+/** First day of the fiscal year a date belongs to, for fiscal years starting in any month. */
+export function fiscalYearStart(date: string, startMonth: number): string {
+  const year = Number(date.slice(0, 4));
+  const month = Number(date.slice(5, 7));
+  const startYear = month >= startMonth ? year : year - 1;
+  return `${startYear}-${String(startMonth).padStart(2, "0")}-01`;
+}
 
-export function buildBuchungsstapel(bookings: Booking[], { tenant, from, to, createdAt, locked }: Options): string {
-  const fiscalYear = `${from.slice(0, 4)}${String(tenant.fiscalYearStartMonth).padStart(2, "0")}01`;
+/** The batch carries dates as TTMM; the year comes from the header, so a batch never spans two fiscal years. */
+export function sameFiscalYear(from: string, to: string, startMonth: number): boolean {
+  return fiscalYearStart(from, startMonth) === fiscalYearStart(to, startMonth);
+}
+
+type Options = {
+  tenant: Tenant;
+  from: string;
+  to: string;
+  createdAt: Date;
+  /**
+   * Header field "Festschreibung". The app has already locked the period; 0 still lets the accountant correct in
+   * DATEV after import, which is what an advisory firm expects from a client's pre-booking.
+   */
+  lockInDatev?: boolean;
+};
+
+export function buildBuchungsstapel(
+  bookings: Booking[],
+  { tenant, from, to, createdAt, lockInDatev = false }: Options,
+): string {
+  if (!sameFiscalYear(from, to, tenant.fiscalYearStartMonth)) {
+    throw new RangeError("Ein Buchungsstapel darf nicht über zwei Wirtschaftsjahre gehen.");
+  }
+  const fiscalYear = fiscalYearStart(from, tenant.fiscalYearStartMonth).replaceAll("-", "");
   const stamp = createdAt
     .toISOString()
     .replace(/[-:TZ.]/g, "")
@@ -81,7 +110,7 @@ export function buildBuchungsstapel(bookings: Booking[], { tenant, from, to, cre
     quote(""),
     "1",
     "0",
-    locked ? "1" : "0",
+    lockInDatev ? "1" : "0",
     quote("EUR"),
     "",
     quote(""),

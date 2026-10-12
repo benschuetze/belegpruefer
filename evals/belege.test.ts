@@ -27,6 +27,8 @@ describe("Eval-Set", () => {
       "software_abo",
       "wartung",
       "fehler_",
+      "drittland",
+      "reparatur_maschine",
       "injection",
     ]) {
       expect(count(kind), kind).toBeGreaterThanOrEqual(2);

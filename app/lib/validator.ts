@@ -61,8 +61,9 @@ const hinweis = (code: string, message: string): Finding => ({ code, severity: "
  */
 export function validateBeleg(beleg: Beleg, today: string): Finding[] {
   const findings: Finding[] = [];
-  const small = isSmallInvoice(beleg);
   const reverseCharge = mentionsReverseCharge(beleg);
+  // § 33 Satz 3 UStDV: no small-invoice relief for § 13b services.
+  const small = isSmallInvoice(beleg) && !reverseCharge;
 
   // Sums: lines → tax groups → totals, each to the cent.
   const lineNet = beleg.lines.reduce((s, l) => s + l.netCents, 0);
@@ -111,6 +112,11 @@ export function validateBeleg(beleg: Beleg, today: string): Finding[] {
       findings.push(fehler("steuernummer_fehlt", "Weder USt-IdNr. noch Steuernummer des Lieferanten angegeben."));
     }
     if (!beleg.buyer?.name) findings.push(fehler("empfaenger_fehlt", "Name des Leistungsempfängers fehlt."));
+    else if (!beleg.buyer.street || !beleg.buyer.city) {
+      findings.push(
+        fehler("empfaenger_anschrift", "Anschrift des Leistungsempfängers fehlt (§ 14 Abs. 4 Nr. 1 UStG)."),
+      );
+    }
     if (!beleg.deliveryDate) {
       findings.push(
         hinweis("leistungsdatum", "Kein Leistungsdatum angegeben. Zulässig, wenn es dem Rechnungsdatum entspricht."),
@@ -165,7 +171,10 @@ export function validateBooking(beleg: Beleg, account: string): Finding[] {
     const text = beleg.notes.join("\n");
     if (!OCCASION.test(text) || !GUESTS.test(text)) {
       findings.push(
-        fehler("bewirtung_angaben", "Bewirtung: Anlass und bewirtete Personen fehlen auf dem Beleg (§ 4 Abs. 5 EStG)."),
+        fehler(
+          "bewirtung_angaben",
+          "Bewirtung: Anlass und bewirtete Personen fehlen (§ 4 Abs. 5 Nr. 2 EStG). Ort, Tag, Bewirtender und maschinelle Rechnung bitte selbst prüfen.",
+        ),
       );
     }
   }

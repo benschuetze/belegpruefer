@@ -68,8 +68,22 @@ const S = {
   allerlei: de("Allerlei Handelshaus", "Lange Reihe 3", "04103", "Leipzig", "DE623089714"),
 } satisfies Record<string, Party>;
 
-const FELDBACH = { name: "Feldbach Design GmbH", country: "DE", vatId: "DE987654321" };
-const LINDGRUEN = { name: "Rösterei Lindgrün UG", country: "DE", vatId: "DE876543219" };
+const FELDBACH = {
+  name: "Feldbach Design GmbH",
+  street: "Am Kanal 7",
+  postcode: "04109",
+  city: "Leipzig",
+  country: "DE",
+  vatId: "DE987654321",
+};
+const LINDGRUEN = {
+  name: "Rösterei Lindgrün UG",
+  street: "Röstgasse 3",
+  postcode: "04229",
+  city: "Leipzig",
+  country: "DE",
+  vatId: "DE876543219",
+};
 
 type DemoInvoice = {
   tenant: 0 | 1;
@@ -201,8 +215,8 @@ export function demoInvoices(): DemoInvoice[] {
         ],
       },
     ),
-    inv(0, "brandt-monitor.xml", S.brandt, "EB-30021", "2026-09-09", [
-      { description: "Monitor 27 Zoll, 4K", netCents: 49900 },
+    inv(0, "brandt-leuchten.xml", S.brandt, "EB-30021", "2026-09-09", [
+      { description: "Schreibtischleuchte LED, dimmbar, 2 Stück", netCents: 59800, quantity: 2 },
     ]),
     inv(0, "brandt-laptop.xml", S.brandt, "EB-30044", "2026-09-17", [
       { description: "Laptop 14 Zoll, 32 GB", netCents: 140000 },

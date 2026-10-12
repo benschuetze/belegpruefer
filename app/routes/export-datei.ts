@@ -1,6 +1,6 @@
 import { currentTenant } from "~/lib/auth.server";
 import { todayInGermany } from "~/lib/dates";
-import { buildBuchungsstapel, exportFilename, toWindows1252 } from "~/lib/datev";
+import { buildBuchungsstapel, exportFilename, sameFiscalYear, toWindows1252 } from "~/lib/datev";
 import { getDb } from "~/lib/db/client";
 import { bookingsInPeriod } from "~/lib/ledger.server";
 import { periodFrom } from "~/lib/period";
@@ -15,7 +15,10 @@ export async function loader({ request }: Route.LoaderArgs) {
   if (rows.length === 0 || rows.some((r) => !r.lockedAt)) {
     throw new Response("Erst festschreiben, dann exportieren.", { status: 409 });
   }
-  const csv = buildBuchungsstapel(rows, { tenant, from, to, createdAt: new Date(), locked: true });
+  if (!sameFiscalYear(from, to, tenant.fiscalYearStartMonth)) {
+    throw new Response("Der Zeitraum geht über zwei Wirtschaftsjahre. Bitte getrennt exportieren.", { status: 400 });
+  }
+  const csv = buildBuchungsstapel(rows, { tenant, from, to, createdAt: new Date() });
   return new Response(new Uint8Array(toWindows1252(csv)), {
     headers: {
       "Content-Type": "text/csv; charset=windows-1252",

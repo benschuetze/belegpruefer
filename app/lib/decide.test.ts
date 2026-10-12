@@ -116,3 +116,20 @@ describe("Steuerschlüssel prüft der Code, nicht das Modell", () => {
     expect(decide({ beleg: mixed, findings: [], kontierer: both }).outcome).toBe("automatisch");
   });
 });
+
+describe("Drittland", () => {
+  it("Leistung aus den USA ohne Steuer geht immer zu einem Menschen, egal wie sicher", () => {
+    const us = makeReverseCharge(9900, {
+      supplier: {
+        name: "Cloudforge Inc.",
+        street: "1 Market St",
+        city: "San Francisco",
+        country: "US",
+        vatId: undefined,
+      },
+    });
+    const result = decide({ beleg: us, findings: [], kontierer: proposal("4964", "", 0.99, 0) });
+    expect(result.outcome).toBe("pruefen");
+    expect(result.reasons.join()).toMatch(/Drittland/);
+  });
+});

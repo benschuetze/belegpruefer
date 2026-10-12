@@ -116,7 +116,13 @@ Vor einem echten Einsatz von einer Steuerberaterin prüfen lassen:
 
 - **BU-Schlüssel für Reverse Charge.** Verwendet wird 46 (sonstige Leistung eines Unternehmers aus dem übrigen Gemeinschaftsgebiet, § 13b Abs. 1 UStG, 19 %). Öffentliche Quellen nennen auch 94 bzw. die neueren dreistelligen DATEV-Schlüssel; die Zuordnung hängt von der Schlüsseltabelle des Mandanten ab.
 - **Konto für Anlagevermögen.** Laptops über der GWG-Grenze gehen auf 0420 (Büroeinrichtung) und immer zur Prüfung; je nach Kanzlei ist 0410 oder 0490 üblich.
-- **DATEV-Format.** Kopfsatz (31 Felder) und die ersten 14 Spalten folgen den öffentlich beschriebenen Formaten; die vollständige Schnittstellenbeschreibung ist nur mit DATEV-Login zugänglich. Der Import in DATEV selbst ist nicht getestet.
+- **DATEV-Format.** Kopfsatz (31 Felder) und die ersten 14 Spalten folgen den öffentlich beschriebenen Formaten; die vollständige Schnittstellenbeschreibung ist nur mit DATEV-Login zugänglich. Der Import in DATEV selbst ist nicht getestet. Die Festschreibung im Kopf steht auf 0: in der App ist der Zeitraum zu, in DATEV kann die Kanzlei noch korrigieren.
+- **Gegenkonto 1600.** Gebucht wird gegen das Sammelkonto Verbindlichkeiten. In DATEV sind Kreditorenkonten (ab 70000) üblich, mit Offene-Posten-Führung; das bräuchte Kreditorenstammdaten je Mandant.
+- **Storno.** Als Gegenbuchung im Haben; DATEV kennt dafür auch die Generalumkehr über den BU-Schlüssel, die die Verkehrszahlen nicht aufbläht.
+- **Bewirtung.** Gebucht wird der volle Betrag auf 4650. Steuerlich abziehbar sind 70 % (§ 4 Abs. 5 Nr. 2 EStG); die Aufteilung auf 4654 (nicht abzugsfähig) überlässt die App der Kanzlei. Der Validator prüft Anlass und Teilnehmer, nicht Ort, Tag, Bewirtenden und die Angaben einer maschinellen Rechnung.
+- **Drittland.** Leistungen aus Nicht-EU-Ländern ohne deutsche Steuer (§ 13b Abs. 2 UStG) gehen immer zur Prüfung; den Steuerschlüssel setzt die App dort nicht selbst.
+- **GWG und Sammelposten.** Als GWG gelten nur selbständig nutzbare Gegenstände (Stuhl, Regal, Leuchte), nicht Monitor oder Drucker. Die Wahl des Sammelpostens (250 bis 1.000 €, § 6 Abs. 2a EStG) je Mandant fehlt.
+- **Kontenwahl als Kanzleientscheidung.** Rohkaffee und Tüten einer Rösterei als Wareneingang (3300/3400) statt Roh- und Hilfsstoffe, Getränke fürs Büro auf 4930 statt 4140: gängig, aber nicht die einzige richtige Wahl. 4955 und 4957 (Buchführung, Abschluss) sind aus der Kontenliste übernommen, aber nicht gegen einen Kanzlei-Kontenplan geprüft.
 
 ## Grenzen
 
@@ -145,7 +151,20 @@ Was die beiden Agenten vor dem ersten PR tatsächlich gefunden haben (lokal übe
 | code-reviewer | Injection-Erkennung schlug bei „Esstisch Buche massiv“ an und übersah die Rechnungsnummer. | Engere Muster, alle Freitextfelder. |
 | code-reviewer | Historie suchte per erstem Wort des Lieferanten („Hotel …“ fand jedes Hotel). | Nur derselbe Lieferant. |
 
-Bewusst nicht geändert: Abmelden widerruft eine kopierte Session nicht (siehe Grenzen).
+Danach hat `tax-reviewer` die Erwartungswerte des Eval-Sets und die Kontenlogik fachlich geprüft, noch bevor gemessen wurde. Sonst hätte das Eval das Modell an falschen Antworten gemessen:
+
+| Befund | Folge |
+|---|---|
+| Reisekosten einer GmbH oder UG erwartete das Set auf 4670 „Reisekosten Unternehmer“; bei Kapitalgesellschaften reist die Geschäftsführung als Arbeitnehmer. | 4660, Regel im Prompt nach Rechtsform. |
+| Monitor, Drucker und Dokumentenkamera als GWG; Peripherie ist nicht selbständig nutzbar. | GWG-Fälle nur noch mit Stuhl, Regal, Leuchte, Schrank; Prompt sagt es ausdrücklich. |
+| Wartung eines Trommelrösters auf 4806 „Hard- und Software“. | Eigener Fall auf 4800 „technische Anlagen und Maschinen“. |
+| Buchführung und Jahresabschluss auf 4950. | 4955 und 4957 aufgenommen. |
+| „Gebühr Kartenterminal“ als steuerfreie Bankleistung; Gerätemiete ist steuerpflichtig. | Fall entfernt. |
+| Reverse Charge nur für EU gedacht; Drittland ist auch § 13b, aber mit anderem Schlüssel. | Drittland immer zur Prüfung, eigene Eval-Fälle. |
+| Kleinbetragsprivileg galt auch für Reverse Charge (§ 33 Satz 3 UStDV schließt das aus); Anschrift des Empfängers wurde nicht geprüft. | Beides im Validator. |
+| WJ-Beginn im DATEV-Kopf falsch bei abweichendem Wirtschaftsjahr. | Richtig berechnet, Stapel über zwei Wirtschaftsjahre abgelehnt. |
+
+Weitere Punkte stehen unter „Fachlich offen“. Bewusst nicht geändert: Abmelden widerruft eine kopierte Session nicht (siehe Grenzen).
 
 ## Lokal starten
 

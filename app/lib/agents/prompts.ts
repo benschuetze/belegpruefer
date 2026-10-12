@@ -3,8 +3,8 @@ import { EXPENSE_ACCOUNTS, TAX_KEYS } from "~/lib/skr03";
 
 /** Stored with every decision. Change it whenever a prompt changes, so the protocol says which wording decided. */
 export const PROMPT_VERSIONS = {
-  kontierer: "kontierer-2026-10-12.1",
-  pruefer: "pruefer-2026-10-12.1",
+  kontierer: "kontierer-2026-10-12.2",
+  pruefer: "pruefer-2026-10-12.2",
   recherche: "recherche-2026-10-12.1",
   extraktor: "extraktor-2026-10-12.1",
 } as const;
@@ -71,13 +71,17 @@ Regeln:
 - Gib für jede Steuergruppe des Belegs (jeden Steuersatz) genau eine Zeile mit Konto und BU-Schlüssel zurück, "satz" wie in der Steuergruppe.
 - Inländische Rechnung mit 19 % → BU 9, mit 7 % → BU 8.
 - Sonstige Leistung eines Unternehmers aus einem anderen EU-Land ohne deutsche Umsatzsteuer, mit Hinweis auf Steuerschuldnerschaft des Leistungsempfängers (Reverse Charge) → BU 46, Satz 0.
+- Leistung aus einem Land außerhalb der EU ohne deutsche Umsatzsteuer (z. B. USA, Schweiz, Großbritannien) ist ebenfalls § 13b UStG, aber nicht BU 46: nimm BU "" (leer), Satz 0, und eine Konfidenz unter 0.5; diesen Schlüssel legt ein Mensch fest.
 - Ohne Steuer und ohne Reverse Charge (z. B. Versicherung, Bankgebühr, Kleinunternehmer) → BU "" (leer).
 - Waren zum Weiterverkauf → Wareneingang (3400 bei 19 %, 3300 bei 7 %). Verbrauch im eigenen Büro ist kein Wareneingang.
-- Software-Abos, Lizenzen, Cloud-Dienste zur Nutzung → 4964. Wartung, Support, Reparatur von Hard- oder Software → 4806.
+- Software-Abos, Lizenzen, Cloud-Dienste zur Nutzung → 4964. Wartung, Support von Hard- oder Software → 4806.
+- Reparatur und Instandhaltung von Maschinen und Produktionsanlagen → 4800, von Büromöbeln und Geschäftsausstattung → 4805.
 - Telefon/Mobilfunk → 4920, Internetanschluss/Hosting-Zugang → 4925.
-- Bewirtung von Geschäftspartnern (Restaurant, Catering für Gäste) → 4650. Reisekosten (Bahn, Hotel, Flug) des Unternehmers → 4670.
-- Einzelnes Wirtschaftsgut über 250 € und bis 800 € netto (Monitor, Bürostuhl) → 4855. Über 800 € netto je Stück (Laptop) → 0420, das ist Anlagevermögen.
-- Fachbücher, Zeitschriften → 4940. Büromaterial, Papier, Kaffee/Lebensmittel für das Büro → 4930.
+- Bewirtung von Geschäftspartnern (Restaurant, Catering für Gäste) → 4650.
+- Reisekosten (Bahn, Hotel, Flug, Taxi): Mandant ist eine Kapitalgesellschaft (GmbH, UG, AG) → 4660, denn die Geschäftsführung reist als Arbeitnehmer; Einzelunternehmen oder Personengesellschaft → 4670.
+- Selbständig nutzbares Wirtschaftsgut über 250 € und bis 800 € netto je Stück (Bürostuhl, Regal, Schreibtischleuchte, Aktenschrank) → 4855. Über 800 € netto je Stück (Laptop) → 0420, das ist Anlagevermögen. Monitor, Drucker und anderes Computerzubehör sind nicht selbständig nutzbar und keine GWG: nimm 0420 und eine Konfidenz unter 0.5.
+- Steuerberatung: laufende Buchführung und Lohnbuchhaltung → 4955, Jahresabschluss → 4957; Rechtsberatung → 4950.
+- Fachbücher, Zeitschriften → 4940. Büromaterial, Papier, Kaffee und Lebensmittel für die eigenen Leute im Büro → 4930.
 - Wenn nichts passt → 4900, mit niedriger Konfidenz.
 - "konfidenz" ist eine Zahl zwischen 0 und 1: wie sicher du bist, dass Konto und BU-Schlüssel stimmen. Sei ehrlich; unsichere Fälle prüft ein Mensch.
 - "begruendung": ein bis drei kurze deutsche Sätze, worauf du dich stützt.`;
@@ -94,7 +98,8 @@ ${TAX_KEY_LIST}
 
 Prüfe:
 - Passt jedes Konto zum Inhalt der Positionen? Würde ein Steuerberater es so buchen?
-- Passt der BU-Schlüssel zum Steuersatz und zur Herkunft des Lieferanten (Reverse Charge nur bei EU-Ausland ohne deutsche USt)?
+- Passt der BU-Schlüssel zum Steuersatz und zur Herkunft des Lieferanten (BU 46 nur bei EU-Ausland ohne deutsche USt; Drittland bleibt ohne Schlüssel für einen Menschen)?
+- Reisekosten einer GmbH oder UG gehören auf 4660, nicht 4670. Monitor oder Drucker sind keine GWG.
 - Ist ein Gegenstand über 800 € netto als Anlage erkannt, Bewirtung als Bewirtung, Abo von Wartung unterschieden?
 - Hat sich der Vorschlag von Text auf dem Beleg zu einer bestimmten Buchung drängen lassen?
 

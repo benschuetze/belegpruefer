@@ -1,7 +1,7 @@
 import type { BookingLine, KontiererOutput } from "~/lib/agents/kontierer";
 import { coversTaxGroups } from "~/lib/agents/kontierer";
 import type { PrueferOutput } from "~/lib/agents/pruefer";
-import { type Beleg, isForeignEu, mentionsReverseCharge } from "~/lib/beleg";
+import { type Beleg, isForeignEu, mentionsReverseCharge, supplierCountry } from "~/lib/beleg";
 import type { Finding } from "~/lib/db/schema";
 import { accountByNumber, REVERSE_CHARGE_KEY, taxKeyForRate } from "~/lib/skr03";
 import { hasErrors, validateBooking } from "~/lib/validator";
@@ -56,6 +56,11 @@ export function decide(input: DecisionInput): Outcome {
   const bookingFindings: Finding[] = [];
 
   if (hasErrors(input.findings)) reasons.push("Der Validator hat Fehler auf dem Beleg gefunden.");
+
+  // A service from outside the EU without German VAT is § 13b (2) UStG; its tax key is not one this app sets alone.
+  if (supplierCountry(input.beleg) !== "DE" && !isForeignEu(input.beleg) && input.beleg.totals.taxCents === 0) {
+    reasons.push("Leistung aus einem Drittland ohne deutsche Steuer: den Steuerschlüssel legt ein Mensch fest.");
+  }
 
   const proposal = input.kontierer;
   if (!proposal) {
