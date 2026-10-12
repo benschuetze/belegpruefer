@@ -202,6 +202,29 @@ describe("Mandantentrennung", () => {
   });
 });
 
+describe("Mandantentrennung in der Datenbank", () => {
+  it("eine Buchung, ein Protokolleintrag oder eine Review kann nicht auf den Beleg eines anderen Mandanten zeigen", async () => {
+    const { db } = await createTestDb();
+    const idA = await upload(db, A);
+    const row = { tenantId: B, documentId: idA, runId: idA, role: "validator" as const };
+    await expect(db.insert(decisions).values(row)).rejects.toThrow();
+    await expect(
+      db.insert(bookings).values({
+        tenantId: B,
+        documentId: idA,
+        bookingDate: TODAY,
+        amountCents: 100,
+        account: "4930",
+        contraAccount: "1600",
+        taxKey: "9",
+        text: "x",
+        reference: "x",
+        source: "manuell",
+      }),
+    ).rejects.toThrow();
+  });
+});
+
 describe("Protokoll ist nur anhängend", () => {
   it("UPDATE und DELETE auf decisions lehnt die Datenbank ab", async () => {
     const { db } = await createTestDb();
@@ -209,6 +232,8 @@ describe("Protokoll ist nur anhängend", () => {
     await processDocument(db, A, id, { models: team(PAPER), research: NO_RESEARCH, today: TODAY });
     await expect(db.update(decisions).set({ model: "anders" })).rejects.toThrow();
     await expect(db.delete(decisions)).rejects.toThrow();
+    await expect(db.execute(sql`truncate decisions`)).rejects.toThrow();
+    await expect(db.execute(sql`truncate reviews`)).rejects.toThrow();
     expect((await db.select().from(decisions)).length).toBeGreaterThan(0);
   });
 });

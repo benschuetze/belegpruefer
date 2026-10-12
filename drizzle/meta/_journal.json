@@ -15,6 +15,27 @@
       "when": 1791800802641,
       "tag": "0001_append_only",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1791803750109,
+      "tag": "0002_dokument_je_mandant_eindeutig",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1791803750361,
+      "tag": "0003_fremdschluessel_je_mandant",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1791803750613,
+      "tag": "0004_truncate_sperre",
+      "breakpoints": true
     }
   ]
 }

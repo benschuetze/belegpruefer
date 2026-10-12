@@ -12,13 +12,18 @@ import { buildCiiXml } from "../../app/lib/parser/build-cii";
 export const E2E_PASSWORD = "e2e-test-passwort";
 export const DEMO_URL = "http://127.0.0.1:5298";
 
-/** Every spec starts from the same state: two tenants, no documents. TRUNCATE skips the append-only row triggers. */
+/**
+ * Every spec starts from the same state: two tenants, no documents. The protocol tables refuse TRUNCATE; in replica
+ * mode ordinary triggers do not fire, which only a superuser of a throwaway test database may switch on.
+ */
 export async function resetDb(): Promise<void> {
   const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL, max: 1 });
   try {
+    await pool.query("set session_replication_role = replica");
     await pool.query(
       "truncate table reviews, decisions, bookings, exports, documents, suppliers, meta, login_attempts restart identity cascade",
     );
+    await pool.query("set session_replication_role = default");
     await seed(drizzle(pool, { schema }) as unknown as Db);
   } finally {
     await pool.end();
