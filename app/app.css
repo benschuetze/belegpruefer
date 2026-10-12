@@ -1,0 +1,272 @@
+@import "tailwindcss";
+/* Fonts are bundled with the app: no request to a font CDN, which the CSP would block anyway. */
+@import "@fontsource/inter/latin-400.css";
+@import "@fontsource/inter/latin-600.css";
+@import "@fontsource/eb-garamond/latin-500.css";
+@import "@fontsource/eb-garamond/latin-500-italic.css";
+@import "@fontsource/eb-garamond/latin-700.css";
+@import "@fontsource/jetbrains-mono/latin-500.css";
+@import "@fontsource/jetbrains-mono/latin-700.css";
+@import "@fontsource/silkscreen/latin-400.css";
+
+/*
+ * E-Ink-Kassenbuch: an e-paper display meets a ledger kept by hand. Paper, ink, greys, ruled lines, pixel labels
+ * and exactly one accent, ballpoint blue. Every value below is a token; components only read tokens.
+ */
+
+:root {
+  --paper: #f3efe5;
+  --card: #fbf9f3;
+  --ink: #141412;
+  --ink-soft: #2b2a26;
+  --muted: #e7e2d4;
+  --muted-ink: #57544c;
+  --pen: #1c3fae;
+  --pen-paper: #eef1fa;
+  --danger: #a3221b;
+  --grey-3: #8c887d;
+  --grey-4: #b9b4a6;
+  --grey-5: #d8d3c4;
+  --radius: 3.2px;
+  --radius-sm: 2px;
+}
+
+/* Night mode is the same display, inverted, not a second colour scheme. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --paper: #191815;
+    --card: #201f1b;
+    --ink: #ece8dd;
+    --ink-soft: #ece8dd;
+    --muted: #2c2a25;
+    --muted-ink: #b3aea1;
+    --pen: #9db2ff;
+    --pen-paper: #1d2340;
+    --danger: #e5675c;
+    --grey-4: #57544c;
+    --grey-5: #2c2a25;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --paper: #191815;
+  --card: #201f1b;
+  --ink: #ece8dd;
+  --ink-soft: #ece8dd;
+  --muted: #2c2a25;
+  --muted-ink: #b3aea1;
+  --pen: #9db2ff;
+  --pen-paper: #1d2340;
+  --danger: #e5675c;
+  --grey-4: #57544c;
+  --grey-5: #2c2a25;
+}
+
+@theme inline {
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-serif: "EB Garamond", ui-serif, Georgia, serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", monospace;
+  --font-pixel: "Silkscreen", ui-monospace, monospace;
+  --color-paper: var(--paper);
+  --color-card: var(--card);
+  --color-ink: var(--ink);
+  --color-ink-soft: var(--ink-soft);
+  --color-muted: var(--muted);
+  --color-muted-ink: var(--muted-ink);
+  --color-pen: var(--pen);
+  --color-pen-paper: var(--pen-paper);
+  --color-danger: var(--danger);
+  --color-grey-3: var(--grey-3);
+  --color-grey-4: var(--grey-4);
+  --color-grey-5: var(--grey-5);
+  --radius-sm: var(--radius-sm);
+  --radius: var(--radius);
+}
+
+@layer base {
+  html {
+    background-color: var(--paper);
+  }
+  body {
+    background-color: var(--paper);
+    color: var(--ink);
+    font-family: var(--font-sans);
+    font-size: 15px;
+    line-height: 22px;
+    -webkit-font-smoothing: antialiased;
+    background-image: repeating-linear-gradient(
+      to bottom,
+      transparent 0,
+      transparent 31px,
+      color-mix(in srgb, var(--ink) 5%, transparent) 31px,
+      color-mix(in srgb, var(--ink) 5%, transparent) 32px
+    );
+  }
+  h1,
+  h2,
+  h3 {
+    font-family: var(--font-serif);
+    letter-spacing: -0.01em;
+  }
+  h1 {
+    font-size: 36px;
+    line-height: 40px;
+    font-weight: 700;
+  }
+  h2 {
+    font-size: 24px;
+    line-height: 30px;
+    font-weight: 500;
+  }
+  a {
+    color: var(--pen);
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+  :focus-visible {
+    outline: 2px solid var(--ink);
+    outline-offset: 2px;
+  }
+  input,
+  select,
+  textarea {
+    background: var(--card);
+    color: var(--ink);
+    border: 2px solid var(--ink-soft);
+    border-radius: var(--radius);
+    padding: 6px 10px;
+  }
+}
+
+@layer components {
+  .masthead {
+    font-family: var(--font-serif);
+    font-style: italic;
+    font-weight: 500;
+    font-size: 20px;
+    line-height: 26px;
+  }
+  .ink-card {
+    background: var(--card);
+    border: 2px solid var(--ink);
+    border-radius: var(--radius);
+    padding: 12px;
+  }
+  .pixel {
+    font-family: var(--font-pixel);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    font-size: 11px;
+    line-height: 14px;
+    color: var(--muted-ink);
+  }
+  /* The one number that matters, closed with a double line like a sum in a ledger. One per view. */
+  .summe {
+    display: inline-block;
+    font-family: var(--font-mono);
+    font-weight: 700;
+    font-size: 48px;
+    line-height: 1.05;
+    color: var(--pen);
+    border-bottom: 0.12em double var(--pen);
+    padding-bottom: 0.04em;
+    margin-bottom: 0.15em;
+  }
+  .figure {
+    font-family: var(--font-mono);
+    font-weight: 700;
+    font-size: 20px;
+    line-height: 26px;
+  }
+  .num {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+    font-weight: 500;
+    font-size: 14px;
+  }
+  .ledger-line {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    font-size: 14px;
+  }
+  .leader {
+    flex: 1;
+    min-width: 1rem;
+    border-bottom: 2px dotted color-mix(in srgb, var(--ink) 45%, transparent);
+    transform: translateY(-0.3em);
+  }
+  .bar {
+    height: 12px;
+    border: 2px solid var(--ink);
+  }
+  .bar > span {
+    display: block;
+    height: 100%;
+    background: var(--ink);
+  }
+  .note {
+    background: var(--pen-paper);
+    color: var(--pen);
+    border: 2px solid var(--pen);
+    border-radius: var(--radius);
+    padding: 8px 12px;
+    font-size: 14px;
+  }
+  .note-danger {
+    background: var(--card);
+    color: var(--danger);
+    border: 2px solid var(--danger);
+    border-radius: var(--radius);
+    padding: 8px 12px;
+    font-size: 14px;
+  }
+  .chip {
+    display: inline-block;
+    font: 600 13px var(--font-sans);
+    border: 2px solid var(--ink);
+    border-radius: var(--radius-sm);
+    padding: 4px 10px;
+    background: var(--card);
+    color: var(--ink);
+    text-decoration: none;
+  }
+  .chip[aria-pressed="true"],
+  .chip[aria-current="page"] {
+    background: var(--ink);
+    color: var(--paper);
+  }
+  .btn {
+    display: inline-block;
+    font: 600 14px var(--font-sans);
+    border: 2px solid var(--ink);
+    border-radius: var(--radius);
+    padding: 8px 14px;
+    background: var(--ink);
+    color: var(--paper);
+    cursor: pointer;
+    text-decoration: none;
+  }
+  .btn.secondary {
+    background: var(--muted);
+    color: var(--ink);
+  }
+  .btn:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+  }
+  .dither {
+    background-image: radial-gradient(currentColor 1px, transparent 1.2px);
+    background-size: 4px 4px;
+  }
+}
+
+/* iOS Safari zooms into fields with text under 16px and leaves the page shifted sideways. */
+@media (max-width: 639px) {
+  input,
+  select,
+  textarea {
+    font-size: 16px;
+  }
+}
