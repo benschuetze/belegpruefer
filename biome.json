@@ -9,7 +9,11 @@
       "!.react-router",
       "!playwright-report",
       "!test-results",
-      "!app/components/ui"
+      "!app/components/ui",
+      "!evals/belege.json",
+      "!evals/ergebnis.json",
+      "!evals/runs",
+      "!evals/pdfs"
     ]
   },
   "formatter": { "indentStyle": "space", "indentWidth": 2, "lineWidth": 120 },

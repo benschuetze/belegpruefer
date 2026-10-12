@@ -187,7 +187,6 @@ function writeResult(runsByVariant: Partial<Record<VariantId, CaseRun[]>>, measu
   const last = (Object.keys(runsByVariant) as VariantId[]).sort().at(-1);
   const result = {
     measuredAt,
-    note: "",
     cases: Math.max(...variantsOut.map((v) => v.n)),
     models: Object.fromEntries(Object.entries(DEFAULT_MODEL_IDS).filter(([role]) => role !== "extraktor")),
     promptVersions: PROMPT_VERSIONS,
