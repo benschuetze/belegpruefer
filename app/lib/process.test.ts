@@ -3,7 +3,7 @@ import { and, eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { makeBeleg } from "../../tests/helpers/belege";
 import { createTestDb } from "../../tests/helpers/db";
-import { AGREE, NO_RESEARCH, team } from "../../tests/helpers/models";
+import { AGREE, fixedModel, NO_RESEARCH, team } from "../../tests/helpers/models";
 import { bookings, decisions, documents, suppliers } from "./db/schema";
 import { DEMO_TENANTS } from "./db/seed";
 import { storeUpload } from "./documents.server";
@@ -239,5 +239,68 @@ describe("Prompt Injection", () => {
     expect(prompt.match(/<\/beleg>/g)).toHaveLength(1);
     const [doc] = await db.select().from(documents).where(eq(documents.id, stored.id));
     expect(doc?.status).toBe("pruefen");
+  });
+});
+
+describe("PDF über den Extraktor", () => {
+  const pdf = Buffer.from("%PDF-1.7\n% erfundene Testdatei\n");
+  const read = {
+    rechnungsnummer: "PW-77",
+    rechnungsdatum: "2026-09-10",
+    leistungsdatum: null,
+    lieferant: {
+      name: "Papierwerk Sommer KG",
+      strasse: "Mühlenweg 12",
+      plz: "34117",
+      ort: "Kassel",
+      land: "DE",
+      ustId: "DE123456789",
+      steuernummer: null,
+    },
+    empfaenger: { name: "Feldbach Design GmbH", ustId: null },
+    positionen: [{ text: "Kopierpapier", menge: 1, netto: "100.00", steuersatz: 19 }],
+    steuergruppen: [{ satz: 19, netto: "100.00", steuer: "19.00" }],
+    summe: { netto: "100.00", steuer: "19.00", brutto: "119.00" },
+    hinweise: [],
+    konfidenz: {
+      lieferant: 0.98,
+      rechnungsnummer: 0.97,
+      rechnungsdatum: 0.96,
+      positionen: 0.95,
+      summen: 0.99,
+      ustId: 0.94,
+    },
+  };
+  const booking = { zeilen: [{ satz: 19, konto: "4930", buSchluessel: "9" }], konfidenz: 0.93, begruendung: "Papier" };
+
+  it("sicher gelesene PDF läuft durch die gleiche Kette wie XML", async () => {
+    const { db } = await createTestDb();
+    const stored = await storeUpload(db, A, "rechnung.pdf", pdf);
+    if (stored.status !== "neu") throw new Error();
+    const models = { ...team(booking), extraktor: fixedModel("claude-sonnet-5-5", read) };
+    const result = await processDocument(db, A, stored.id, { models, research: NO_RESEARCH, today: TODAY });
+    expect(result.status).toBe("automatisch");
+    const steps = await db.select().from(decisions).where(eq(decisions.documentId, stored.id));
+    expect(steps[0]).toMatchObject({ role: "extraktor", model: "claude-sonnet-5-5", confidence: 0.94 });
+  });
+
+  it("unsicher gelesene PDF (Konfidenz unter 0,8) → prüfen, auch wenn Kontierer und Prüfer sicher sind", async () => {
+    const { db } = await createTestDb();
+    const stored = await storeUpload(db, A, "unscharf.pdf", pdf);
+    if (stored.status !== "neu") throw new Error();
+    const unsure = { ...read, konfidenz: { ...read.konfidenz, summen: 0.55 } };
+    const models = { ...team(booking), extraktor: fixedModel("claude-sonnet-5-5", unsure) };
+    const result = await processDocument(db, A, stored.id, { models, research: NO_RESEARCH, today: TODAY });
+    expect(result.status).toBe("pruefen");
+  });
+
+  it("Extraktor ohne verwertbare Antwort → fehler mit Grund, nichts gebucht", async () => {
+    const { db } = await createTestDb();
+    const stored = await storeUpload(db, A, "kaputt.pdf", pdf);
+    if (stored.status !== "neu") throw new Error();
+    const models = { ...team(booking), extraktor: fixedModel("claude-sonnet-5-5", { unsinn: true }) };
+    const result = await processDocument(db, A, stored.id, { models, research: NO_RESEARCH, today: TODAY });
+    expect(result.status === "fehler" && result.error).toMatch(/PDF nicht lesbar/);
+    expect(await db.select().from(bookings)).toEqual([]);
   });
 });
