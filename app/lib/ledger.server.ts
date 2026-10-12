@@ -3,7 +3,7 @@ import type { BookingLine, KontiererOutput } from "~/lib/agents/kontierer";
 import { bookingLineSchema } from "~/lib/agents/kontierer";
 import type { Db } from "~/lib/db/client";
 import { bookings, decisions, documents, exports, reviews } from "~/lib/db/schema";
-import { bookingsFor } from "~/lib/process.server";
+import { bookingsFor, openBookingDate } from "~/lib/process.server";
 
 export class LedgerError extends Error {}
 
@@ -61,7 +61,16 @@ export async function confirmDocument(
     await tx.delete(bookings).where(and(eq(bookings.tenantId, tenantId), eq(bookings.documentId, documentId)));
     await tx
       .insert(bookings)
-      .values(bookingsFor(tenantId, documentId, doc.extracted, parsed.data, changed ? "manuell" : "ki", today));
+      .values(
+        bookingsFor(
+          tenantId,
+          documentId,
+          doc.extracted,
+          parsed.data,
+          changed ? "manuell" : "ki",
+          await openBookingDate(tx, tenantId, doc.extracted.issueDate, today),
+        ),
+      );
     await tx.insert(reviews).values({
       tenantId,
       documentId,
@@ -195,6 +204,7 @@ export async function reverseAndRebook(
         reversalOf: b.id,
       })),
     );
+    // The correction belongs to the period it is made in, like the reversal; the closed period stays as exported.
     await tx.insert(bookings).values(bookingsFor(tenantId, documentId, doc.extracted, parsed.data, "manuell", today));
     await tx.insert(reviews).values({
       tenantId,

@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { and, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, lte, sql } from "drizzle-orm";
 import { extractPdf } from "~/lib/agents/extraktor";
 import type { BookingLine, Example, KontiererOutput } from "~/lib/agents/kontierer";
 import type { AgentModels } from "~/lib/agents/models";
@@ -8,11 +8,12 @@ import type { PrueferOutput } from "~/lib/agents/pruefer";
 import type { ResearchTools } from "~/lib/agents/recherche";
 import type { Beleg } from "~/lib/beleg";
 import { takeFromDailyBudget } from "~/lib/daily-budget.server";
-import type { Db } from "~/lib/db/client";
+import type { Db, Tx } from "~/lib/db/client";
 import {
   bookings,
   decisions,
   documents,
+  exports,
   type Finding,
   type NewBooking,
   type SupplierProfile,
@@ -49,13 +50,26 @@ export function bookingText(beleg: Beleg): string {
   return `${beleg.supplier.name} ${beleg.invoiceNumber ?? ""}`.trim().slice(0, 60);
 }
 
+/**
+ * The date a new booking goes under: the invoice date, unless that period is already festgeschrieben. A closed
+ * period never gets anything added afterwards, so the export of that period stays exactly as it was.
+ */
+export async function openBookingDate(db: Db | Tx, tenantId: string, issueDate: string | undefined, today: string) {
+  if (!issueDate) return today;
+  const closed = await (db as Db).$count(
+    exports,
+    and(eq(exports.tenantId, tenantId), lte(exports.periodFrom, issueDate), gte(exports.periodTo, issueDate)),
+  );
+  return closed > 0 ? today : issueDate;
+}
+
 export function bookingsFor(
   tenantId: string,
   documentId: string,
   beleg: Beleg,
   lines: BookingLine[],
   source: NewBooking["source"],
-  today: string,
+  bookingDate: string,
 ): NewBooking[] {
   return lines.map((line) => {
     const group = beleg.taxGroups.find((g) => g.rate === line.satz);
@@ -63,7 +77,7 @@ export function bookingsFor(
     return {
       tenantId,
       documentId,
-      bookingDate: beleg.issueDate ?? today,
+      bookingDate,
       amountCents: group.netCents + group.taxCents,
       account: line.konto,
       contraAccount: CONTRA_ACCOUNT,
@@ -253,7 +267,8 @@ export async function processDocument(
           set: researched ? { profile, profileSource: "recherche" } : { vatId: beleg.supplier.vatId },
         });
       if (outcome.outcome === "automatisch" && kontierer) {
-        await tx.insert(bookings).values(bookingsFor(tenantId, documentId, beleg, kontierer.zeilen, "ki", deps.today));
+        const date = await openBookingDate(tx, tenantId, beleg.issueDate, deps.today);
+        await tx.insert(bookings).values(bookingsFor(tenantId, documentId, beleg, kontierer.zeilen, "ki", date));
       }
       await tx
         .update(documents)
