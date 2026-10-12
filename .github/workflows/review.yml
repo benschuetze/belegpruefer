@@ -50,6 +50,8 @@ jobs:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
           use_sticky_comment: true
+          # The repo is private; without this, an API error (key, workspace, model) is reported only as "is_error".
+          show_full_output: true
           # Bounded and read-only: one model, few turns, no shell beyond reading this PR and commenting on it.
           claude_args: >-
             --model claude-sonnet-5-5
