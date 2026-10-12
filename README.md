@@ -16,7 +16,7 @@ Die Startseite beantwortet eine Frage: **Wie viele Belege sind fertig, wie viele
 - **Protokoll** jeder Entscheidung, nur anhängend: Modell, Prompt-Version, Eingabe, Ausgabe, Konfidenz, Tokens, Kosten, Dauer. Die Datenbank lehnt UPDATE und DELETE per Trigger ab.
 - **Festschreiben** eines Zeitraums (verweigert, solange dort etwas offen ist). Danach ist eine Buchung unveränderbar, auch für die Datenbank; Korrektur nur per Storno plus neuer Buchung.
 - **DATEV-Export** als Buchungsstapel (EXTF 700, Kategorie 21, Version 13), Semikolon, Dezimalkomma, Windows-1252.
-- **Eval mit Ablation:** vier Aufstellungen auf 150+ erfundenen Belegen, Kennzahl „falsch trotz automatisch“.
+- **Eval mit Ablation:** vier Aufstellungen auf 165 erfundenen Belegen, Kennzahl „falsch trotz automatisch“, gemessen gegen das echte Modell.
 
 ## Architektur
 
@@ -87,14 +87,34 @@ Regeln für alle Agenten:
 - Anlagevermögen (z. B. Laptop über 800 € netto) → immer `pruefen`
 - Für das Konto fehlen Angaben (Bewirtung ohne Anlass und Teilnehmer, GWG über der Grenze) → `pruefen`
 - Prüfer mit Einwand oder ohne Antwort → `pruefen`
-- Konfidenz unter der Schwelle: 0,8, für Risikokonten (Bewirtung, GWG, Reverse Charge) 0,9 → `pruefen`
+- Konfidenz unter der Schwelle: 0,85, für Risikokonten (Bewirtung, GWG, Reverse Charge) 0,9 → `pruefen`
+- Leistung aus einem Drittland ohne deutsche Steuer → `pruefen`
 - sonst `automatisch`
 
-Die Schwellen sind Startwerte; siehe Eval.
+Die Schwelle 0,85 kommt aus dem Eval (Startwert war 0,8), siehe unten.
 
 ## Eval
 
-_Noch nicht gemessen._ `pnpm eval` ruft das echte Modell und kostet Guthaben; es läuft nur nach Rückfrage.
+Gemessen am **12.10.2026** auf **165 erfundenen Belegen** (`evals/belege.json`), Kontierer und Recherche `claude-haiku-5-5`, Prüfer `claude-sonnet-5-5`, Prompts `kontierer-2026-10-12.2` / `pruefer-2026-10-12.2`. Rohdaten je Beleg in `evals/runs/`, Zusammenfassung in `evals/ergebnis.json`, im Demo unter „Eval“. Der ganze Lauf hat 2,05 $ gekostet.
+
+Die Tabelle zeigt die Entscheidung mit der gewählten Schwelle (0,85 normal, 0,9 für Risikokonten); die Bewertung spielt die Entscheidung in Code auf den gespeicherten Antworten nach.
+
+| Aufstellung | Konto richtig | BU richtig | automatisch | **falsch trotz automatisch** | Kosten/Beleg | Zeit/Beleg |
+|---|---:|---:|---:|---:|---:|---:|
+| 1 Kontierer allein | 97,6 % | 100 % | 72,7 % | **0 %** (0) | 0,016 ct | 1,7 s |
+| 2 + Prüfer | 97,6 % | 100 % | 72,1 % | **0 %** (0) | 0,362 ct | 4,2 s |
+| 3 + Prüfer + Recherche | 97,6 % | 100 % | 69,7 % | **0 %** (0) | 0,374 ct | 5,8 s |
+| 4 + Prüfer + Recherche + Beispiele | 98,8 % | 100 % | 71,5 % | **0 %** (0) | 0,378 ct | 5,8 s |
+
+Kalibrierung (Aufstellung 4, Anteil richtig kontierter Belege je Konfidenzbereich): 0–0,6: 13 Belege, 100 % · 0,6–0,8: 4, 75 % · 0,8–0,9: 12, 92 % · 0,9–1,0: 136, 100 %. Extraktion aus PDF (`claude-sonnet-5-5`, 20 erfundene Rechnungen in drei Layouts): alle neun Felder bei allen 20 richtig, 0,93 ct je Beleg.
+
+**Lohnt sich der Prüfer?** Auf diesem Set nicht: Er hat nur bei vier Belegen widersprochen, die der Kontierer ohnehin unsicher gemeldet hatte, und keine einzige falsche automatische Buchung zusätzlich verhindert, kostet aber das 22-Fache (absolut 0,35 ct je Beleg). Er bleibt drin, weil die Belege hier sauber erfunden sind und echte Rechnungen unordentlicher sind; der nächste Schritt wäre, ihn nur unterhalb von 0,95 Konfidenz und bei Risikokonten zu fragen. **Lohnt sich die Recherche?** Nicht messbar: gleiche Kontogenauigkeit, etwas weniger Automatik, 1,6 s mehr je Beleg. Was hilft, sind **Beispiele aus bestätigten Buchungen** desselben Lieferanten (97,6 % → 98,8 % Konto richtig).
+
+**Schwelle.** Mit dem Startwert 0,8 ging in Aufstellung 3 ein Beleg falsch durch: Visitenkarten auf Bürobedarf statt Werbung, Konfidenz 0,80 (fachlich vertretbar, aber nicht der Erwartungswert). Über alle vier Aufstellungen lag jede falsche Kontierung bei 0,80 oder darunter, im Bereich 0,9–1,0 war jede richtig. Deshalb 0,85: gut ein Prozentpunkt weniger Automatik, dafür Abstand zur Zone, in der die Fehler liegen. Das Schwellen-Raster steht in `evals/ergebnis.json` (`sweep`).
+
+Grenzen der Messung: ein Lauf je Aufstellung, keine Wiederholungen (Unterschiede von ein, zwei Belegen sind Rauschen); die Belege sind aus Vorlagen erzeugt und damit leichter als echte; die Erwartungswerte sind regelbasiert festgelegt und vom `tax-reviewer` fachlich geprüft. Eine Stichprobe von 30 Fällen zur Prüfung von Hand liegt in `evals/stichprobe.md` und ist **noch nicht abgehakt**.
+
+`pnpm eval --dry-run` schätzt die Kosten, `pnpm eval` misst (nur nach Rückfrage; auch als manueller Workflow „Eval“), `pnpm eval --nur-auswerten` rechnet die Tabelle aus den gespeicherten Läufen neu.
 
 ## Entscheidungen
 

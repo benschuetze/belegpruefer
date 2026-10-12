@@ -52,9 +52,9 @@ describe("Entscheidung: automatisch nur, wenn alles passt", () => {
     expect(decide({ beleg: paper, findings: [], kontierer: null, pruefer: agree }).outcome).toBe("pruefen");
   });
 
-  it("Schwelle 0,8: 0,79 prüfen, 0,80 automatisch", () => {
-    expect(decide({ beleg: paper, findings: [], kontierer: proposal("4930", "9", 0.79) }).outcome).toBe("pruefen");
-    expect(decide({ beleg: paper, findings: [], kontierer: proposal("4930", "9", 0.8) }).outcome).toBe("automatisch");
+  it("Schwelle 0,85 (aus dem Eval): 0,84 prüfen, 0,85 automatisch", () => {
+    expect(decide({ beleg: paper, findings: [], kontierer: proposal("4930", "9", 0.84) }).outcome).toBe("pruefen");
+    expect(decide({ beleg: paper, findings: [], kontierer: proposal("4930", "9", 0.85) }).outcome).toBe("automatisch");
   });
 });
 

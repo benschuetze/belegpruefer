@@ -6,8 +6,11 @@ import type { Finding } from "~/lib/db/schema";
 import { accountByNumber, REVERSE_CHARGE_KEY, taxKeyForRate } from "~/lib/skr03";
 import { hasErrors, validateBooking } from "~/lib/validator";
 
-/** Start values from the briefing; `evals/` measures where they should be and the README explains the choice. */
-export const DEFAULT_THRESHOLDS = { normal: 0.8, risk: 0.9 };
+/**
+ * From the eval (evals/ergebnis.json, README "Eval"): every wrong account had a confidence of 0.80 or less, so the
+ * normal threshold sits at 0.85 instead of the starting 0.8. Risk accounts keep 0.9.
+ */
+export const DEFAULT_THRESHOLDS = { normal: 0.85, risk: 0.9 };
 export type Thresholds = typeof DEFAULT_THRESHOLDS;
 
 export type DecisionInput = {

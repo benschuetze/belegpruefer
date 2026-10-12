@@ -20,7 +20,7 @@ test("Einwand und Injection landen in prüfen; Konto ändern bucht manuell und l
 
   await expect(page.getByText("Kontierer · Konfidenz 0.20")).toBeVisible();
   await expect(page.getByTestId("pruefer")).toContainText("Einwand");
-  await expect(page.getByText(/Konfidenz 0.20 liegt unter der Schwelle 0.80/)).toBeVisible();
+  await expect(page.getByText(/Konfidenz 0.20 liegt unter der Schwelle 0.85/)).toBeVisible();
 
   await page.getByText("Konto ändern").click();
   await page.getByLabel("Konto").selectOption("4600");

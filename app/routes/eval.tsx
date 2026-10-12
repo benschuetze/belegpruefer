@@ -63,7 +63,9 @@ export default function Eval() {
                 .join(", ")}
             </p>
           </section>
-          <div className="ink-card overflow-x-auto p-0">
+          {/* Scrolls sideways on narrow screens; focusable so the keyboard can scroll it too. */}
+          {/* biome-ignore lint/a11y/noNoninteractiveTabindex: a scrollable region must be reachable by keyboard (WCAG 2.1.1, axe scrollable-region-focusable) */}
+          <section className="ink-card overflow-x-auto p-0" aria-label="Ablationstabelle" tabIndex={0}>
             <table className="w-full text-[14px]">
               <caption className="sr-only">Ablation der vier Aufstellungen</caption>
               <thead>
@@ -97,7 +99,7 @@ export default function Eval() {
                 ))}
               </tbody>
             </table>
-          </div>
+          </section>
           <section className="ink-card max-w-xl space-y-1">
             <h2 className="text-[20px]">Kalibrierung ({full.label})</h2>
             {full.calibration.map((b) => (

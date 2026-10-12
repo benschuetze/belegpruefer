@@ -6,6 +6,9 @@ test.beforeEach(resetDb);
 test("Mandanten sind getrennt: Beleg von A ist bei B weder in der Liste noch per Link erreichbar", async ({ page }) => {
   await page.goto("/");
   await page.getByRole("button", { name: "Feldbach Design GmbH" }).click();
+  // The switch is a form post with a redirect; navigating on before it lands would cancel it.
+  await expect(page.getByRole("button", { name: "Feldbach Design GmbH" })).toHaveAttribute("aria-pressed", "true");
+  await page.waitForLoadState("load");
   await upload(page, [invoiceFile("a.xml", [{ description: "Kopierpapier", netCents: 5000 }])]);
   await page.getByRole("status", { name: "Ergebnis des Uploads" }).getByRole("link", { name: "ansehen" }).click();
   await expect(page).toHaveURL(/\/belege\/[0-9a-f-]{36}$/);
