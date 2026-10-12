@@ -1,0 +1,43 @@
+name: Review
+
+# Claude reviews every PR with the two review agents from .claude/agents and posts one comment.
+on:
+  pull_request:
+    types: [opened, synchronize, ready_for_review]
+
+permissions:
+  contents: read
+  pull-requests: write
+  id-token: write
+
+concurrency:
+  group: review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    if: github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: anthropics/claude-code-action@1d6de8cb0c237e7c15e9e1bdf973826ebae490cc # v1.0.248
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          use_sticky_comment: true
+          # A bounded review: one model, few turns, read-only tools. Credits are limited on purpose.
+          claude_args: >-
+            --model claude-sonnet-5-5
+            --max-turns 20
+            --allowedTools "Read,Grep,Glob,Bash(git diff:*),Bash(git log:*),Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*)"
+          prompt: |
+            Review PR #${{ github.event.pull_request.number }} in ${{ github.repository }} against ${{ github.event.pull_request.base.ref }}.
+            Do two passes and follow the instructions in these files exactly:
+            1. .claude/agents/code-reviewer.md
+            2. .claude/agents/security-reviewer.md
+            Read CLAUDE.md first for the project rules. Report only real findings with file, line, problem and
+            suggestion; say plainly when a pass found nothing. Write in German. Post the result as one PR comment with
+            `gh pr comment`.
