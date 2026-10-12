@@ -2,7 +2,7 @@
 
 Eingangsrechnungen für mehrere Mandanten: hochladen, auslesen, nach SKR03 kontieren, von einem zweiten Agenten prüfen lassen, automatisch buchen oder dir vorlegen, festschreiben, als DATEV-Buchungsstapel exportieren. Dazu eine Messung, ob sich das Agenten-Team gegenüber einem einzelnen Modell lohnt.
 
-**Demo:** _(Link folgt nach dem ersten Deployment)_ · schreibgeschützt, zwei erfundene Mandanten, erfundene Rechnungen, die Agenten laufen dort als feste Stichwort-Modelle („Mockdaten“).
+**Demo:** _noch nicht veröffentlicht_ (Vercel-Projekt mit Neon in Frankfurt ist vorbereitet: `vercel.json`, `DEMO_MODE=true`, `AI_MOCK=1`) · schreibgeschützt, zwei erfundene Mandanten, erfundene Rechnungen, die Agenten laufen dort als feste Stichwort-Modelle („Mockdaten“).
 
 Die Startseite beantwortet eine Frage: **Wie viele Belege sind fertig, wie viele brauchen dich?**
 
@@ -155,6 +155,8 @@ Vor einem echten Einsatz von einer Steuerberaterin prüfen lassen:
 ## Arbeitsweise mit Agenten
 
 Das Repo wurde mit Claude Code gebaut. In `.claude/` liegen Skills (`verify`, `db-change`, `agent-eval`, `e-ink-design`, `ship`) und drei Review-Agenten (`code-reviewer`, `security-reviewer`, `tax-reviewer`). Jeder PR bekommt über die Claude-Code-GitHub-Action eine Review durch `code-reviewer` und `security-reviewer`; die Anweisungen dafür liest der Workflow vom Basis-Branch, damit ein PR seinen eigenen Reviewer nicht umschreiben kann.
+
+Die Review durch die GitHub-Action läuft beim Öffnen eines PRs und erneut mit dem Label `review`; ein Lauf kostet etwa 0,37 $. Ihr erster Kommentar steht in [PR #1](https://github.com/benschuetze/belegpruefer/pull/1): ein Wettlauf zwischen Buchen und Festschreiben, ein verlorenes Minuszeichen im Buchungstext, ein Fehlalarm der Injection-Erkennung bei „System: Lizenz“, dazu kleinere Punkte; alle behoben im selben PR. Damit die Action überhaupt lief, musste der Workspace-Header über `ANTHROPIC_CUSTOM_HEADERS` gesetzt werden, weil der Key für mehrere Workspaces gilt.
 
 Was die beiden Agenten vor dem ersten PR tatsächlich gefunden haben (lokal über den ganzen Stand, alle behoben, jeweils mit Test):
 
