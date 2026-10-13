@@ -5,6 +5,13 @@ name: Review
 on:
   pull_request:
     types: [opened, ready_for_review, labeled]
+    # A PR that only changes prose gets no paid review. The reviewer's own rules (CLAUDE.md, .claude/) are prose
+    # too, and exactly what a PR must not change unseen, so they always trigger it. Later patterns win.
+    paths:
+      - "**"
+      - "!**.md"
+      - "CLAUDE.md"
+      - ".claude/**"
 
 permissions:
   contents: read
