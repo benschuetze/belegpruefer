@@ -5,6 +5,9 @@ name: Review
 on:
   pull_request:
     types: [opened, ready_for_review, labeled]
+    # A PR that only changes text gets no paid review.
+    paths-ignore:
+      - "**.md"
 
 permissions:
   contents: read
