@@ -43,6 +43,12 @@ describe("Header", () => {
     expect(h.get("Referrer-Policy")).toBe("no-referrer");
     expect(h.get("X-Robots-Tag")).toContain("noindex");
   });
+  it("Seiten mit Mandantendaten landen in keinem gemeinsamen Cache", () => {
+    // Without this, Vercel answers "public, max-age=0, must-revalidate" and a proxy may keep a client's page.
+    const h = new Headers({ "Cache-Control": "public, max-age=0, must-revalidate" });
+    applySecurityHeaders(h);
+    expect(h.get("Cache-Control")).toBe("private, no-store");
+  });
   it("CSP erlaubt nur Skripte mit Nonce und verbietet Einbetten", () => {
     const csp = contentSecurityPolicy("abc");
     expect(csp).toContain("script-src 'nonce-abc' 'strict-dynamic'");

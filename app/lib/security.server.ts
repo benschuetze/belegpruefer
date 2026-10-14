@@ -37,6 +37,9 @@ export function applySecurityHeaders(headers: Headers): void {
   headers.set("Cross-Origin-Opener-Policy", "same-origin");
   // Clients' invoices have no business in a search index; the demo is linked directly, not found via search.
   headers.set("X-Robots-Tag", "noindex, nofollow");
+  // Every response of the app is per session and most carry a client's invoices: no shared cache may keep one.
+  // Static assets do not pass through here; Vercel serves them with their own long-lived headers.
+  headers.set("Cache-Control", "private, no-store");
 }
 
 /**

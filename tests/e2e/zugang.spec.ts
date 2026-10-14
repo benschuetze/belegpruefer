@@ -11,6 +11,13 @@ test.describe("ohne Login", () => {
     expect(post.status()).toBe(401);
   });
 
+  test("Seiten mit Belegen landen in keinem gemeinsamen Cache", async ({ request }) => {
+    for (const path of ["/", "/belege", "/belege.data"]) {
+      const res = await request.get(`${DEMO_URL}${path}`);
+      expect(res.headers()["cache-control"], path).toBe("private, no-store");
+    }
+  });
+
   test("fremde Seite darf nichts schreiben (CSRF)", async ({ request }) => {
     const post = await request.post("/login", { headers: { Origin: "https://evil.example" }, form: { password: "x" } });
     // Our middleware answers 403; React Router's own origin check may answer 400 first. Both refuse.
