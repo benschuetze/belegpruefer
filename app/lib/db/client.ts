@@ -12,6 +12,27 @@ export type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
 
 let db: Db | undefined;
 
+/** The login role the app runs as; created by scripts/create-app-login.ts, member of belegpruefer_app. */
+export const APP_LOGIN = "belegpruefer_web";
+const MIN_APP_PASSWORD_LENGTH = 32;
+
+/**
+ * Where the app connects at runtime. DATABASE_URL is the owner of the tables (migrations, seed, demo reset; on
+ * Vercel it comes from the Neon integration). With APP_DB_PASSWORD set, the app swaps in its own login role on the
+ * same host, so only one secret has to be managed and the owner credentials are never typed anywhere.
+ */
+export function runtimeDatabaseUrl(env: NodeJS.ProcessEnv = process.env): string | undefined {
+  const owner = env.DATABASE_URL;
+  if (!owner || !env.APP_DB_PASSWORD) return owner;
+  if (env.APP_DB_PASSWORD.length < MIN_APP_PASSWORD_LENGTH) {
+    throw new Error(`APP_DB_PASSWORD braucht mindestens ${MIN_APP_PASSWORD_LENGTH} Zeichen`);
+  }
+  const url = new URL(owner);
+  url.username = APP_LOGIN;
+  url.password = env.APP_DB_PASSWORD;
+  return url.toString();
+}
+
 export function createDb(url: string): Db {
   // Neon over WebSocket, not neon-http: processing a document writes status, protocol and bookings in one
   // interactive transaction, and the HTTP driver cannot hold a transaction open across statements.
@@ -30,8 +51,7 @@ export function createDb(url: string): Db {
 
 export function getDb(): Db {
   if (!db) {
-    // The runtime role (rows only, no ALTER/TRUNCATE) when configured; DATABASE_URL is the owner for migrations.
-    const url = process.env.APP_DATABASE_URL || process.env.DATABASE_URL;
+    const url = runtimeDatabaseUrl();
     if (!url) throw new Error("DATABASE_URL fehlt");
     db = createDb(url);
   }

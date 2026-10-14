@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { createTestDb, dbRefusal } from "../../../tests/helpers/db";
+import { runtimeDatabaseUrl } from "./client";
 
 /**
  * Every table and what the runtime role may do with it. A new table without an entry here fails the first test:
@@ -86,5 +87,25 @@ describe("Laufzeitrolle der App", () => {
   ])("verweigert: %s", async (_, statement) => {
     const { db } = await createTestDb();
     expect(await dbRefusal(db.execute(sql.raw(statement)))).toMatch(/permission denied|must be owner/);
+  });
+});
+
+describe("Verbindung der App", () => {
+  const owner = "postgres://neondb_owner:geheim@ep-x.eu-central-1.aws.neon.tech/neondb?sslmode=require";
+
+  it("ohne APP_DB_PASSWORD: DATABASE_URL (lokal, Tests)", () => {
+    expect(runtimeDatabaseUrl({ DATABASE_URL: owner })).toBe(owner);
+  });
+
+  it("mit APP_DB_PASSWORD: dieselbe Datenbank, aber als Login-Rolle der App, nie als Eigentümer", () => {
+    const url = new URL(runtimeDatabaseUrl({ DATABASE_URL: owner, APP_DB_PASSWORD: `${"a".repeat(31)}/@:` }) ?? "");
+    expect(url.username).toBe("belegpruefer_web");
+    expect(decodeURIComponent(url.password)).toBe(`${"a".repeat(31)}/@:`);
+    expect(url.host).toBe("ep-x.eu-central-1.aws.neon.tech");
+    expect(url.search).toBe("?sslmode=require");
+  });
+
+  it("ein zu kurzes Passwort wird abgelehnt statt benutzt", () => {
+    expect(() => runtimeDatabaseUrl({ DATABASE_URL: owner, APP_DB_PASSWORD: "kurz" })).toThrow(/32 Zeichen/);
   });
 });

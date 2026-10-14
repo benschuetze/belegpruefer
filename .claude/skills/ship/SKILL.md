@@ -11,6 +11,6 @@ description: Use when a feature or fix is done and should be committed, pushed a
 4. Schema geändert: Skill `db-change` abgeschlossen. Agenten geändert: Skill `agent-eval`.
 5. Agent `code-reviewer` (und bei Routen, DB, Agenten `security-reviewer`) über den Diff laufen lassen, Befunde beheben oder begründet ablehnen.
 6. Branch, Conventional Commits, push, PR. CI abwarten; rot heißt Ursache finden, nicht neu starten.
-6a. Neue Migration mit Rechten oder Rollen: `APP_DATABASE_URL` (Login-Rolle der App) muss in Vercel gesetzt sein; `scripts/check-app-role.ts` lässt den Build sonst scheitern. `DATABASE_URL` (Neon-Integration) bleibt der Eigentümer.
+6a. Neue Migration mit Rechten oder Rollen: `APP_DB_PASSWORD` muss in Vercel gesetzt sein (der Build legt damit die Login-Rolle an); `scripts/check-app-role.ts` lässt den Build sonst scheitern. `DATABASE_URL` (Neon-Integration) bleibt der Eigentümer.
 7. Nach dem Merge: Vercel-Deployment abwarten, Demo-URL öffnen, die geänderte Stelle ansehen, Laufzeit-Logs lesen.
 8. In einer Zeile sagen, was live ist, mit URL. Erst wenn es live gesehen wurde.
