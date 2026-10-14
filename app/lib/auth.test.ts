@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createTestDb } from "../../tests/helpers/db";
-import { currentTenant, guard, isLoggedIn, switchTenant } from "./auth.server";
+import { currentTenant, guard, isLoggedIn, safeRedirect, switchTenant } from "./auth.server";
 import type { Db } from "./db/client";
 import { tenants } from "./db/schema";
 import { DEMO_TENANTS } from "./db/seed";
@@ -62,5 +62,28 @@ describe("Zugang", () => {
     await expect(switchTenant(db, new Request("http://x/mandant"), DEMO_TENANTS[1].id, "/")).rejects.toMatchObject({
       status: 503,
     });
+  });
+});
+
+describe("Weiterleitung nach Login und Aktionen", () => {
+  it.each(["/belege", "/belege?filter=pruefen", "/belege/abc#x"])("bleibt auf der eigenen Seite: %s", (to) => {
+    expect(safeRedirect(to)).toBe(to);
+  });
+  // Each of these would end up as "//evil.example", which a browser follows to another host.
+  it.each([
+    "//evil.example",
+    "https://evil.example",
+    "/\\evil.example",
+    "/\t/evil.example",
+    "/.//evil.example",
+    "/%2e//evil.example",
+    "/a/..//evil.example",
+    "/./%2e/..//evil.example",
+    "",
+    null,
+  ])("führt nie auf eine fremde Seite: %j", (to) => {
+    const target = safeRedirect(to);
+    expect(target).toMatch(/^\/(?![/\\])/);
+    expect(new URL(target, "https://app.example").origin).toBe("https://app.example");
   });
 });

@@ -422,4 +422,40 @@ describe("Warteschlange: kein Beleg bleibt hängen, keiner wird doppelt gebucht"
     // PAPER books two lines (19 % and 7 %); a second run would have doubled them.
     expect(lines.length).toBe(2);
   });
+
+  it("auch auf dem Fehlerweg: ein abgelöster Lauf schreibt nichts und meldet übersprungen statt abzubrechen", async () => {
+    const { db } = await createTestDb();
+    const stored = await storeUpload(db, A, "r.pdf", Buffer.from("%PDF-1.7\n% erfundene Testdatei\n"));
+    if (stored.status !== "neu") throw new Error(stored.status);
+    let release = () => {};
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const unreadable = {
+      ...team(PAPER),
+      extraktor: fixedModel("claude-sonnet-5-5", async () => {
+        await held;
+        return "kein JSON";
+      }),
+    };
+    const t0 = new Date("2026-10-12T08:00:00Z");
+    const first = processDocument(db, A, stored.id, { ...deps, models: unreadable, now: () => t0 });
+    await expect
+      .poll(async () => (await db.select().from(documents).where(eq(documents.id, stored.id)))[0]?.status)
+      .toBe("verarbeitung");
+    const later = new Date(t0.getTime() + STALE_AFTER_MS + 1000);
+    const second = await processDocument(db, A, stored.id, {
+      ...deps,
+      models: { ...team(PAPER), extraktor: fixedModel("claude-sonnet-5-5", "kaputt") },
+      now: () => later,
+    });
+    expect(second.status).toBe("fehler");
+
+    release();
+    expect((await first).status).toBe("uebersprungen");
+    const runs = new Set(
+      (await db.select().from(decisions).where(eq(decisions.documentId, stored.id))).map((d) => d.runId),
+    );
+    expect(runs.size).toBe(1);
+  });
 });

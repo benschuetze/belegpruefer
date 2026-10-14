@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { DEMO_URL } from "./helpers";
+import { DEMO_URL, E2E_PASSWORD } from "./helpers";
 
 test.describe("ohne Login", () => {
   test.use({ storageState: { cookies: [], origins: [] } });
@@ -9,6 +9,14 @@ test.describe("ohne Login", () => {
     await expect(page).toHaveURL(/\/login\?next=%2Fbelege/);
     const post = await request.post("/belege", { headers: { Origin: "http://127.0.0.1:5299" } });
     expect(post.status()).toBe(401);
+  });
+
+  test("Login mit präparierter Weiterleitung landet auf der eigenen Seite, nicht auf einer fremden", async ({ page }) => {
+    await page.goto("/login?next=/.//evil.example");
+    await page.getByLabel("Passwort").fill(E2E_PASSWORD);
+    await page.getByRole("button", { name: "Anmelden" }).click();
+    await expect(page.getByTestId("brauchen-dich")).toBeVisible();
+    expect(new URL(page.url()).host).toBe("127.0.0.1:5299");
   });
 
   test("Seiten mit Belegen landen in keinem gemeinsamen Cache", async ({ request }) => {

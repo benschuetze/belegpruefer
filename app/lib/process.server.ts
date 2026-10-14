@@ -31,7 +31,9 @@ export const DAILY_LLM_CALLS = Number(process.env.LLM_DAILY_LIMIT ?? 600);
 export const PARALLEL_DOCUMENTS = 3;
 /**
  * A run that has not finished after this long is considered dead (function timeout, crash, deploy). Far above
- * what one request of processPending takes, so a live run is never overtaken.
+ * what one request of processQueue takes, so a live run is never overtaken. Must stay above the function timeout
+ * (Vercel default 300 s, no maxDuration set): a run still alive past it would be overtaken and its model calls
+ * paid twice, though never booked twice.
  */
 export const STALE_AFTER_MS = 5 * 60 * 1000;
 
@@ -189,6 +191,8 @@ export async function processDocument(
 
   try {
     const steps: Step[] = [];
+    // Always `return await fail(...)`: without the await, a rejection (ClaimLost, database error) would skip the
+    // catch below and leave the document hanging in "verarbeitung".
     const fail = async (error: string, extra: Step[] = []) => {
       await db.transaction(async (tx) => {
         const runId = randomUUID();
@@ -216,12 +220,12 @@ export async function processDocument(
         input: { filename: doc.filename, bytes: bytes.length },
         output: parsed.ok ? { profile: parsed.profile } : { reason: parsed.reason },
       });
-      if (!parsed.ok) return fail(`Nicht lesbar: ${parsed.reason}`);
+      if (!parsed.ok) return await fail(`Nicht lesbar: ${parsed.reason}`);
       beleg = parsed.beleg;
     } else {
-      if (!deps.models) return fail("PDF braucht das KI-Modell, das auf dieser Instanz nicht eingerichtet ist.");
+      if (!deps.models) return await fail("PDF braucht das KI-Modell, das auf dieser Instanz nicht eingerichtet ist.");
       if ((await takeFromDailyBudget(db, "llm_calls", 1, DAILY_LLM_CALLS)) < 1) {
-        return fail("Tageslimit für KI-Aufrufe erreicht. Morgen erneut versuchen.");
+        return await fail("Tageslimit für KI-Aufrufe erreicht. Morgen erneut versuchen.");
       }
       const extracted = await extractPdf(deps.models.extraktor, bytes);
       steps.push({
@@ -236,7 +240,7 @@ export async function processDocument(
         costMicrocents: extracted.costMicrocents,
         durationMs: extracted.durationMs,
       });
-      if (!extracted.beleg) return fail(`PDF nicht lesbar: ${extracted.error ?? "keine verwertbare Antwort"}`);
+      if (!extracted.beleg) return await fail(`PDF nicht lesbar: ${extracted.error ?? "keine verwertbare Antwort"}`);
       beleg = extracted.beleg;
     }
 

@@ -127,14 +127,17 @@ export async function switchTenant(db: Db, request: Request, tenantId: string, r
 
 /**
  * Only same-site paths. "//evil.example" would be followed as a protocol-relative URL, and browsers strip tabs
- * and newlines first, so "/<tab>/evil.example" turns into the same thing: control characters are refused.
+ * and newlines first, so "/<tab>/evil.example" turns into the same thing: control characters are refused. Dot
+ * segments ("/.//evil.example") collapse into it as well, which is why the normalised path is checked again.
  */
 export function safeRedirect(to: string | null | undefined): string {
   // biome-ignore lint/suspicious/noControlCharactersInRegex: control characters are exactly what is refused
   if (!to?.startsWith("/") || /[\u0000-\u001f\u007f\\]/.test(to)) return "/";
   const url = new URL(to, "http://same.invalid");
   if (url.origin !== "http://same.invalid") return "/";
-  return url.pathname + url.search + url.hash;
+  // Parsing resolves dot segments: "/.//evil.example" comes back as "//evil.example". Check the result too.
+  const path = url.pathname + url.search + url.hash;
+  return path.startsWith("//") ? "/" : path;
 }
 
 const PUBLIC_PATHS = new Set(["/login", "/favicon.ico"]);
