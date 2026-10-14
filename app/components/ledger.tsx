@@ -16,9 +16,10 @@ export function LedgerLine({
 }) {
   return (
     <div className="ledger-line" data-testid={testId}>
-      <span className="shrink-0">{label}</span>
+      {/* The label wraps (long invoice lines); an amount never does, a text value may. */}
+      <span className="min-w-0 break-words">{label}</span>
       <span className="leader" aria-hidden="true" />
-      <span className={text ? "min-w-0 text-right" : "num"}>{children}</span>
+      <span className={text ? "min-w-0 text-right" : "num shrink-0"}>{children}</span>
     </div>
   );
 }

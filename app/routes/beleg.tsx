@@ -147,6 +147,7 @@ export default function Beleg() {
                   // biome-ignore lint/suspicious/noArrayIndexKey: invoice lines have no id and never reorder
                   <li key={i}>
                     <LedgerLine
+                      testId="position"
                       label={`${l.quantity && l.quantity !== 1 ? `${l.quantity} × ` : ""}${l.description} (${l.taxRate} %)`}
                     >
                       <Amount cents={l.netCents} />
