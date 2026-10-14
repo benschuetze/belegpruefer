@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import type { BookingLine } from "~/lib/agents/kontierer";
 import { createMockAgentModels } from "~/lib/agents/mock";
 import type { Beleg } from "~/lib/beleg";
@@ -8,7 +8,7 @@ import { confirmDocument, latestProposal, lockPeriod } from "~/lib/ledger.server
 import { buildCiiXml } from "~/lib/parser/build-cii";
 import { processDocument } from "~/lib/process.server";
 import type { Db } from "./client";
-import { documents } from "./schema";
+import { documents, meta } from "./schema";
 import { DEMO_TENANTS } from "./seed";
 
 /*
@@ -279,6 +279,33 @@ export function demoInvoices(): DemoInvoice[] {
     ),
   ];
   return [...august, ...september];
+}
+
+/** Raise when the demo invoices or the rules that judge them change, so the public demo shows the current state. */
+export const DEMO_DATA_VERSION = "2026-10-14";
+
+/**
+ * Throws away the invented data of the public demo and loads it anew. Only for a database that holds nothing but
+ * demo tenants: the protocol tables refuse TRUNCATE by trigger, so the owner switches those triggers off for this one
+ * transaction. Never called on a private instance (see scripts/seed.ts).
+ */
+export async function resetDemoDataIfOutdated(db: Db): Promise<boolean> {
+  const [row] = await db.select().from(meta).where(eq(meta.key, "demo_data_version"));
+  if (row?.value === DEMO_DATA_VERSION) return false;
+  await db.transaction(async (tx) => {
+    await tx.execute(sql`alter table decisions disable trigger user`);
+    await tx.execute(sql`alter table reviews disable trigger user`);
+    await tx.execute(sql`alter table bookings disable trigger user`);
+    await tx.execute(sql`truncate table reviews, decisions, bookings, exports, documents, suppliers`);
+    await tx.execute(sql`alter table decisions enable trigger user`);
+    await tx.execute(sql`alter table reviews enable trigger user`);
+    await tx.execute(sql`alter table bookings enable trigger user`);
+    await tx
+      .insert(meta)
+      .values({ key: "demo_data_version", value: DEMO_DATA_VERSION })
+      .onConflictDoUpdate({ target: meta.key, set: { value: DEMO_DATA_VERSION } });
+  });
+  return true;
 }
 
 /**

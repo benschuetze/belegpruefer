@@ -1,7 +1,7 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { createTestDb } from "../../../tests/helpers/db";
-import { loadDemoData } from "./demo-data";
+import { loadDemoData, resetDemoDataIfOutdated } from "./demo-data";
 import { bookings, documents } from "./schema";
 import { DEMO_TENANTS } from "./seed";
 
@@ -33,5 +33,19 @@ describe("Demo-Daten", () => {
       .from(bookings)
       .where(and(eq(bookings.tenantId, DEMO_TENANTS[0].id), eq(bookings.bookingDate, "2026-08-04")));
     expect(locked.every((b) => b.lockedAt)).toBe(true);
+  });
+});
+
+describe("Demo-Daten neu laden", () => {
+  it("lädt bei neuer Version alles neu, sonst nichts; die Protokoll-Trigger sind danach wieder scharf", async () => {
+    const { db } = await createTestDb();
+    await loadDemoData(db);
+    expect(await resetDemoDataIfOutdated(db)).toBe(true);
+    expect(await db.$count(documents)).toBe(0);
+    expect(await loadDemoData(db)).toBeGreaterThan(20);
+    expect(await resetDemoDataIfOutdated(db)).toBe(false);
+    expect(await db.$count(documents)).toBeGreaterThan(20);
+    await expect(db.execute(sql`delete from decisions`)).rejects.toThrow();
+    await expect(db.execute(sql`truncate reviews`)).rejects.toThrow();
   });
 });
