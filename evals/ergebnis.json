@@ -1255,7 +1255,7 @@
  "threshold": {
   "normal": 0.85,
   "risk": 0.9,
-  "reason": "Alle falsch kontierten Belege lagen in allen vier Aufstellungen bei einer Konfidenz von höchstens 0,80; im Bereich 0,9–1,0 war jede Kontierung richtig. Die Schwelle steigt deshalb von 0,80 auf 0,85: das kostet gut einen Prozentpunkt Automatik (72,7 % → 71,5 % in der vollen Aufstellung) und hält Abstand zu der Zone, in der die Fehler liegen. Für Risikokonten bleibt 0,9."
+  "reason": "Alle falsch kontierten Belege lagen in allen vier Aufstellungen bei einer Konfidenz von höchstens 0,80; im Bereich [0,9; 1] war jede Kontierung richtig. Die Schwelle steigt deshalb von 0,80 auf 0,85: das kostet gut einen Prozentpunkt Automatik (72,7 % → 71,5 % in der vollen Aufstellung) und hält Abstand zu der Zone, in der die Fehler liegen. Für Risikokonten bleibt 0,9."
  },
  "fazit": [
   "Der Prüfer lohnt sich auf diesem Set nicht: Er hat nur bei vier Belegen widersprochen, die der Kontierer ohnehin unsicher gemeldet hatte, und keine falsche automatische Buchung zusätzlich verhindert, kostet aber das 22-Fache (0,35 ct je Beleg).",
