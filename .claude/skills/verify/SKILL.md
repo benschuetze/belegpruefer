@@ -63,3 +63,4 @@ description: Use for every code change before calling it done - writing the righ
 - Lokale PGlite bedient alle Verbindungen aus einem Backend: gegen sie `DATABASE_POOL_MAX=1` (E2E setzt das selbst). „unnamed prepared statement does not exist“ heißt genau das, nicht ein Fehler der App.
 - Was nur kurz sichtbar ist (Warteschlange), für Screenshots per `page.route` verzögern.
 - „Sichtbar“ reicht nicht, wenn etwas überdeckt sein kann: `elementFromPoint` prüfen.
+- E2E-Helfer, die auf einer Seite klicken: erst `data-hydrated` abwarten (sonst schickt der Browser das Formular nativ ab). Läuft auf der Seite ein Poller (Warteschlange), vor dem nächsten `goto` auf Netzwerkruhe warten: Ein abgebrochener `.data`-Request löst in React Router einen harten Reload aus, der das `goto` unterbricht. Wackelnde Tests mit `--repeat-each 5` prüfen, Ursache im Trace suchen.

@@ -49,6 +49,8 @@ export function belegFile(name: string, beleg: Beleg) {
 
 export async function upload(page: Page, files: ReturnType<typeof invoiceFile>[]) {
   await page.goto("/belege");
+  // Clicked before hydration, the form posts natively; that navigation to /belege can then cut off the test's next goto.
+  await expect(page.locator("html")).toHaveAttribute("data-hydrated", "true");
   await page.getByLabel("Rechnungen hochladen").setInputFiles(files);
   await page.getByRole("button", { name: "Hochladen und prüfen" }).click();
   await expect(page.getByRole("status", { name: "Ergebnis des Uploads" })).toBeVisible();
@@ -58,6 +60,10 @@ export async function upload(page: Page, files: ReturnType<typeof invoiceFile>[]
     /wartet auf Prüfung|wird geprüft/,
     { timeout: 30_000 },
   );
+  // A last /verarbeiten round can still be in flight; leaving the page aborts it, and React Router answers the
+  // aborted request with a reload of /belege that cuts off the test's next goto. The poller has no visible state
+  // for "request running", so network idle is the signal here.
+  await page.waitForLoadState("networkidle");
 }
 
 export function collectConsoleErrors(page: Page): string[] {
