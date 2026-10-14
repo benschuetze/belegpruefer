@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { and, count, desc, eq, gte, inArray, lte, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, gte, inArray, isNull, lt, lte, or, sql } from "drizzle-orm";
 import { extractPdf } from "~/lib/agents/extraktor";
 import type { BookingLine, Example, KontiererOutput } from "~/lib/agents/kontierer";
 import type { AgentModels } from "~/lib/agents/models";
@@ -29,6 +29,11 @@ import { validateBeleg } from "~/lib/validator";
 
 export const DAILY_LLM_CALLS = Number(process.env.LLM_DAILY_LIMIT ?? 600);
 export const PARALLEL_DOCUMENTS = 3;
+/**
+ * A run that has not finished after this long is considered dead (function timeout, crash, deploy). Far above
+ * what one request of processPending takes, so a live run is never overtaken.
+ */
+export const STALE_AFTER_MS = 5 * 60 * 1000;
 
 export type ProcessDeps = {
   models: AgentModels | null;
@@ -36,7 +41,27 @@ export type ProcessDeps = {
   today: string;
   team?: Team;
   thresholds?: Thresholds;
+  /** Clock for the claim; tests move it to simulate a run that died. */
+  now?: () => Date;
 };
+
+/** Another run took the document over while this one was still busy; this run must not write anything. */
+class ClaimLost extends Error {}
+
+/** New, failed on request, or left behind by a run that died. */
+function claimable(tenantId: string, now: Date) {
+  const staleBefore = new Date(now.getTime() - STALE_AFTER_MS);
+  return and(
+    eq(documents.tenantId, tenantId),
+    or(
+      eq(documents.status, "neu"),
+      and(
+        eq(documents.status, "verarbeitung"),
+        or(isNull(documents.processingStartedAt), lt(documents.processingStartedAt, staleBefore)),
+      ),
+    ),
+  );
+}
 
 export type ProcessResult =
   | { status: "automatisch" | "pruefen"; outcome: Outcome }
@@ -140,15 +165,27 @@ export async function processDocument(
   deps: ProcessDeps,
 ): Promise<ProcessResult> {
   const team = deps.team ?? FULL_TEAM;
-  // Claim the document: a second click or a parallel run finds nothing to claim and stops.
+  // Claim the document: a second click or a parallel run finds nothing to claim and stops. Milliseconds only, so
+  // the value read back compares equal to the one written.
+  const claimedAt = new Date((deps.now ?? (() => new Date()))().getTime());
   const [doc] = await db
     .update(documents)
-    .set({ status: "verarbeitung", error: null })
+    .set({ status: "verarbeitung", error: null, processingStartedAt: claimedAt })
     .where(
-      and(eq(documents.tenantId, tenantId), eq(documents.id, documentId), inArray(documents.status, ["neu", "fehler"])),
+      and(
+        eq(documents.id, documentId),
+        or(claimable(tenantId, claimedAt), and(eq(documents.tenantId, tenantId), eq(documents.status, "fehler"))),
+      ),
     )
     .returning();
   if (!doc) return { status: "uebersprungen" };
+  // Every write of this run goes through here: it only lands while the claim is still this run's.
+  const stillMine = and(
+    eq(documents.tenantId, tenantId),
+    eq(documents.id, documentId),
+    eq(documents.status, "verarbeitung"),
+    eq(documents.processingStartedAt, claimedAt),
+  );
 
   try {
     const steps: Step[] = [];
@@ -156,11 +193,13 @@ export async function processDocument(
       await db.transaction(async (tx) => {
         const runId = randomUUID();
         const rows = [...steps, ...extra].map((s) => ({ ...s, tenantId, documentId, runId }));
-        if (rows.length > 0) await tx.insert(decisions).values(rows);
-        await tx
+        const updated = await tx
           .update(documents)
-          .set({ status: "fehler", error })
-          .where(and(eq(documents.tenantId, tenantId), eq(documents.id, documentId)));
+          .set({ status: "fehler", error, processingStartedAt: null })
+          .where(stillMine)
+          .returning({ id: documents.id });
+        if (updated.length === 0) throw new ClaimLost();
+        if (rows.length > 0) await tx.insert(decisions).values(rows);
       });
       return { status: "fehler" as const, error };
     };
@@ -261,6 +300,19 @@ export async function processDocument(
     const runId = randomUUID();
     await db.transaction(async (tx) => {
       await lockLedger(tx, tenantId);
+      // First, so a run that was taken over writes nothing at all: no second protocol, no second booking.
+      const updated = await tx
+        .update(documents)
+        .set({
+          status: outcome.outcome,
+          extracted: beleg,
+          findings: [...findings, ...outcome.bookingFindings],
+          error: null,
+          processingStartedAt: null,
+        })
+        .where(stillMine)
+        .returning({ id: documents.id });
+      if (updated.length === 0) throw new ClaimLost();
       await tx.insert(decisions).values(steps.map((s) => ({ ...s, tenantId, documentId, runId })));
       await tx
         .insert(suppliers)
@@ -280,27 +332,21 @@ export async function processDocument(
         const date = await openBookingDate(tx, tenantId, beleg.issueDate, deps.today);
         await tx.insert(bookings).values(bookingsFor(tenantId, documentId, beleg, kontierer.zeilen, "ki", date));
       }
-      await tx
-        .update(documents)
-        .set({
-          status: outcome.outcome,
-          extracted: beleg,
-          findings: [...findings, ...outcome.bookingFindings],
-          error: null,
-        })
-        .where(and(eq(documents.tenantId, tenantId), eq(documents.id, documentId)));
     });
     return { status: outcome.outcome, outcome };
   } catch (error) {
+    if (error instanceof ClaimLost) return { status: "uebersprungen" };
     // Drizzle wraps database errors as "Failed query: <sql> params: <values>"; the values are invoice data and
     // must not end up in a log or on screen. The cause carries the database's own message.
     const cause = error instanceof Error && error.cause ? error.cause : error;
     const message = `Verarbeitung abgebrochen: ${safeError(cause)}`;
     console.error(message);
-    await db
+    const updated = await db
       .update(documents)
-      .set({ status: "fehler", error: message.slice(0, 500) })
-      .where(and(eq(documents.tenantId, tenantId), eq(documents.id, documentId)));
+      .set({ status: "fehler", error: message.slice(0, 500), processingStartedAt: null })
+      .where(stillMine)
+      .returning({ id: documents.id });
+    if (updated.length === 0) return { status: "uebersprungen" };
     return { status: "fehler", error: message };
   }
 }
@@ -317,4 +363,27 @@ export async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T) =>
   });
   await Promise.all(workers);
   return results;
+}
+
+/**
+ * The documents table is the queue: status "neu" means waiting. One call takes at most `max` of the oldest
+ * waiting documents of this tenant (plus any a dead run left behind) and processes them. Short on purpose: a
+ * request never comes near the function timeout, and whatever is left waits for the next call.
+ */
+export async function nextInQueue(db: Db, tenantId: string, max: number, now = new Date()): Promise<string[]> {
+  const rows = await db
+    .select({ id: documents.id })
+    .from(documents)
+    .where(claimable(tenantId, now))
+    .orderBy(asc(documents.createdAt))
+    .limit(max);
+  return rows.map((r) => r.id);
+}
+
+/** Waiting or in progress: what the page shows as "wird geprüft" and why it keeps asking. */
+export async function queueLength(db: Db, tenantId: string): Promise<number> {
+  return db.$count(
+    documents,
+    and(eq(documents.tenantId, tenantId), inArray(documents.status, ["neu", "verarbeitung"])),
+  );
 }

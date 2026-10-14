@@ -2,7 +2,15 @@ import { getAgentModels } from "~/lib/agents/models";
 import { viesCheckLive } from "~/lib/agents/recherche";
 import { todayInGermany } from "~/lib/dates";
 import type { Db } from "~/lib/db/client";
-import { mapLimit, PARALLEL_DOCUMENTS, type ProcessDeps, processDocument, supplierHistory } from "~/lib/process.server";
+import {
+  mapLimit,
+  nextInQueue,
+  PARALLEL_DOCUMENTS,
+  type ProcessDeps,
+  processDocument,
+  queueLength,
+  supplierHistory,
+} from "~/lib/process.server";
 import { vatIdFormatValid } from "~/lib/validator";
 
 /** Production wiring: real or mock models, real VIES unless mocked, history from this tenant only. */
@@ -23,4 +31,14 @@ export async function processDeps(db: Db, tenantId: string): Promise<ProcessDeps
 export async function processMany(db: Db, tenantId: string, ids: string[]) {
   const deps = await processDeps(db, tenantId);
   return mapLimit(ids, PARALLEL_DOCUMENTS, (id) => processDocument(db, tenantId, id, deps));
+}
+
+/** One short round of work on the queue; the page calls again while documents are waiting. */
+export async function processQueue(db: Db, tenantId: string) {
+  const ids = await nextInQueue(db, tenantId, PARALLEL_DOCUMENTS);
+  const outcomes = ids.length === 0 ? [] : await processMany(db, tenantId, ids);
+  return {
+    processed: outcomes.filter((o) => o.status !== "uebersprungen").length,
+    waiting: await queueLength(db, tenantId),
+  };
 }

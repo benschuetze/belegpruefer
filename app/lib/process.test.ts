@@ -8,7 +8,7 @@ import { bookings, decisions, documents, suppliers } from "./db/schema";
 import { DEMO_TENANTS } from "./db/seed";
 import { storeUpload } from "./documents.server";
 import { buildCiiXml } from "./parser/build-cii";
-import { processDocument, supplierHistory } from "./process.server";
+import { nextInQueue, processDocument, STALE_AFTER_MS, supplierHistory } from "./process.server";
 
 const A = DEMO_TENANTS[0].id;
 const B = DEMO_TENANTS[1].id;
@@ -357,5 +357,69 @@ describe("Historie für Beispiele und Recherche", () => {
     expect(await supplierHistory(db, A, "hotel am hafen a")).toHaveLength(1);
     expect(await supplierHistory(db, A, "Hotel Am Hafen B")).toHaveLength(0);
     expect(await supplierHistory(db, B, "Hotel Am Hafen A")).toHaveLength(0);
+  });
+});
+
+describe("Warteschlange: kein Beleg bleibt hängen, keiner wird doppelt gebucht", () => {
+  const deps = { models: team(PAPER), research: NO_RESEARCH, today: TODAY };
+
+  it("hochgeladene Belege warten in der Reihenfolge des Uploads, nur die des eigenen Mandanten", async () => {
+    const { db } = await createTestDb();
+    const first = await upload(db, A, "xrechnung-papierwerk.xml");
+    const second = await upload(db, A, "zugferd-clickwave.xml");
+    await upload(db, B, "xrechnung-papierwerk.xml");
+    expect(await nextInQueue(db, A, 10)).toEqual([first, second]);
+    expect(await nextInQueue(db, A, 1)).toEqual([first]);
+    await processDocument(db, A, first, deps);
+    expect(await nextInQueue(db, A, 10)).toEqual([second]);
+  });
+
+  it("ein Lauf, der abgebrochen ist (Timeout, Absturz), gibt den Beleg nach einer Weile wieder frei", async () => {
+    const { db } = await createTestDb();
+    const id = await upload(db);
+    const died = new Date(Date.now() - STALE_AFTER_MS - 1000);
+    await db.update(documents).set({ status: "verarbeitung", processingStartedAt: died }).where(eq(documents.id, id));
+    expect(await nextInQueue(db, A, 10)).toEqual([id]);
+    expect((await processDocument(db, A, id, deps)).status).toBe("automatisch");
+  });
+
+  it("ein Lauf, der noch arbeitet, wird nicht überholt", async () => {
+    const { db } = await createTestDb();
+    const id = await upload(db);
+    await db
+      .update(documents)
+      .set({ status: "verarbeitung", processingStartedAt: new Date() })
+      .where(eq(documents.id, id));
+    expect(await nextInQueue(db, A, 10)).toEqual([]);
+    expect((await processDocument(db, A, id, deps)).status).toBe("uebersprungen");
+  });
+
+  it("übernimmt ein zweiter Lauf, schreibt der erste danach nichts mehr: ein Protokoll, eine Buchung", async () => {
+    const { db } = await createTestDb();
+    const id = await upload(db);
+    let release = () => {};
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const slow = team(async () => {
+      await held;
+      return PAPER;
+    });
+    // Run 1 claims and then hangs inside the Kontierer call, long enough to count as dead.
+    const t0 = new Date("2026-10-12T08:00:00Z");
+    const first = processDocument(db, A, id, { ...deps, models: slow, now: () => t0 });
+    await expect
+      .poll(async () => (await db.select().from(documents).where(eq(documents.id, id)))[0]?.status)
+      .toBe("verarbeitung");
+    const later = new Date(t0.getTime() + STALE_AFTER_MS + 1000);
+    expect((await processDocument(db, A, id, { ...deps, now: () => later })).status).toBe("automatisch");
+
+    release();
+    expect((await first).status).toBe("uebersprungen");
+    const runs = new Set((await db.select().from(decisions).where(eq(decisions.documentId, id))).map((d) => d.runId));
+    expect(runs.size).toBe(1);
+    const lines = await db.select().from(bookings).where(eq(bookings.documentId, id));
+    // PAPER books two lines (19 % and 7 %); a second run would have doubled them.
+    expect(lines.length).toBe(2);
   });
 });

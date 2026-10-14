@@ -43,6 +43,13 @@
       "when": 1791961692505,
       "tag": "0005_laufzeit_rolle",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1791962154378,
+      "tag": "0006_verarbeitung_lease",
+      "breakpoints": true
     }
   ]
 }

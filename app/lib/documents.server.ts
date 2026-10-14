@@ -3,7 +3,9 @@ import { and, eq } from "drizzle-orm";
 import type { Db } from "~/lib/db/client";
 import { documents } from "~/lib/db/schema";
 
-export const MAX_UPLOAD_BYTES = 4 * 1024 * 1024;
+import { MAX_REQUEST_BYTES } from "~/lib/upload-limits";
+
+export const MAX_UPLOAD_BYTES = MAX_REQUEST_BYTES;
 
 export type UploadResult =
   | { status: "neu"; id: string; filename: string }

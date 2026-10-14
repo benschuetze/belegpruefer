@@ -49,6 +49,8 @@ export async function upload(page: Page, files: ReturnType<typeof invoiceFile>[]
   await page.getByLabel("Rechnungen hochladen").setInputFiles(files);
   await page.getByRole("button", { name: "Hochladen und prüfen" }).click();
   await expect(page.getByRole("status", { name: "Ergebnis des Uploads" })).toBeVisible();
+  // The upload only stores; the page then works the queue off. Done when nothing waits any more.
+  await expect(page.getByRole("status", { name: "Warteschlange" })).toBeHidden({ timeout: 30_000 });
 }
 
 export function collectConsoleErrors(page: Page): string[] {

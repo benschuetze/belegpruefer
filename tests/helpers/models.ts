@@ -11,7 +11,8 @@ export function fixedModel(id: string, reply: Reply, seen: string[] = []): Agent
       doGenerate: async ({ prompt }) => {
         const text = JSON.stringify(prompt);
         seen.push(text);
-        const value = typeof reply === "function" ? (reply as (p: string) => unknown)(text) : reply;
+        // A reply function may return a promise, so a test can hold a run in the middle of the chain.
+        const value = await (typeof reply === "function" ? (reply as (p: string) => unknown)(text) : reply);
         if (value instanceof Error) throw value;
         return {
           content: [{ type: "text", text: typeof value === "string" ? value : JSON.stringify(value) }],

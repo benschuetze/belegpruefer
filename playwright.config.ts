@@ -18,6 +18,8 @@ const appEnv = {
   SESSION_SECRET: "e2e-session-secret-nur-fuer-tests-000000",
   NODE_ENV: "production",
   INSECURE_COOKIES: "1",
+  // Locally the database is PGlite, one backend for all connections; CI keeps real parallelism against Postgres.
+  ...(CI ? {} : { DATABASE_POOL_MAX: "1" }),
 };
 
 export default defineConfig({

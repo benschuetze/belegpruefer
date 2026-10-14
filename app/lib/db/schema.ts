@@ -105,6 +105,11 @@ export const documents = pgTable(
     findings: jsonb("findings_jsonb").$type<Finding[]>(),
     /** Why processing failed, for status "fehler". Never model output or document text. */
     error: text("error"),
+    /**
+     * When the current run claimed the document (status "verarbeitung"). A run that died leaves it behind; after a
+     * while another run may take over, and the first one's late write is refused because the timestamp moved on.
+     */
+    processingStartedAt: timestamp("processing_started_at", { withTimezone: true }),
     createdAt: createdAt(),
   },
   (t) => [

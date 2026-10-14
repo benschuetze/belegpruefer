@@ -5,6 +5,7 @@ export default [
   route("belege", "routes/belege.tsx"),
   route("belege/:id", "routes/beleg.tsx"),
   route("belege/:id/datei", "routes/beleg-datei.ts"),
+  route("verarbeiten", "routes/verarbeiten.ts"),
   route("protokoll", "routes/protokoll.tsx"),
   route("export", "routes/export.tsx"),
   route("export/datei", "routes/export-datei.ts"),

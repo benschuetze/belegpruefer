@@ -1,5 +1,6 @@
 import { Link, useLoaderData } from "react-router";
 import { LedgerLine } from "~/components/ledger";
+import { QueueStatus } from "~/components/queue-status";
 import { UploadForm } from "~/components/upload-form";
 import { currentTenant, isDemo } from "~/lib/auth.server";
 import { getDb } from "~/lib/db/client";
@@ -46,6 +47,8 @@ export default function Home() {
         ) : null}
       </section>
 
+      <QueueStatus waiting={numbers.waiting} />
+
       <details className="ink-card max-w-xl" open>
         <summary className="cursor-pointer font-semibold">Wie gerechnet?</summary>
         <div className="mt-3 space-y-1">
@@ -57,6 +60,7 @@ export default function Home() {
           <LedgerLine label="Festgeschrieben">{numbers.locked}</LedgerLine>
           <LedgerLine label="Zu prüfen">{numbers.review}</LedgerLine>
           <LedgerLine label="Nicht lesbar oder abgebrochen">{numbers.failed}</LedgerLine>
+          {numbers.waiting > 0 ? <LedgerLine label="Wird gerade geprüft">{numbers.waiting}</LedgerLine> : null}
           <p className="pt-2 text-[13px] text-muted-ink">
             Brauchen dich = zu prüfen + nicht lesbar. Fertig = automatisch + bestätigt + festgeschrieben.
           </p>

@@ -17,7 +17,9 @@ export function createDb(url: string): Db {
   // interactive transaction, and the HTTP driver cannot hold a transaction open across statements.
   const pool = new URL(url).hostname.endsWith(".neon.tech")
     ? new NeonPool({ connectionString: url, max: 5 })
-    : new pg.Pool({ connectionString: url });
+    : // PGlite behind a socket (local dev, local E2E) serves every connection from one backend, so parallel
+      // transactions get mixed up there ("unnamed prepared statement does not exist"). It gets one connection.
+      new pg.Pool({ connectionString: url, max: Number(process.env.DATABASE_POOL_MAX) || 10 });
   // An idle connection the server closes emits "error" on the pool; unhandled, that ends the whole process.
   // The next query simply opens a new connection.
   pool.on("error", (error: Error) => console.error(`Datenbankverbindung geschlossen: ${error.message}`));

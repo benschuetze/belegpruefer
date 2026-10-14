@@ -221,7 +221,7 @@ Weitere Punkte stehen unter „Fachlich offen“. Bewusst nicht geändert: Abmel
 
 ```bash
 pnpm install
-cp .env.example .env   # DATABASE_URL=postgres://postgres@127.0.0.1:5433/postgres, AI_MOCK=1, APP_PASSWORD, SESSION_SECRET
+cp .env.example .env   # DATABASE_URL=postgres://postgres@127.0.0.1:5433/postgres, DATABASE_POOL_MAX=1, AI_MOCK=1, APP_PASSWORD, SESSION_SECRET
 pnpm db:local          # Postgres ohne Installation, mit Demo-Belegen
 pnpm dev
 pnpm check             # typecheck, lint, Unit- und DB-Tests, E2E
