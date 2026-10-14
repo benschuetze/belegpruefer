@@ -2,7 +2,7 @@ import { and, eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { createTestDb } from "../../../tests/helpers/db";
 import { loadDemoData, markDemoDataLoaded, NotADemoDatabase, resetDemoDataIfOutdated } from "./demo-data";
-import { bookings, decisions, documents, tenants } from "./schema";
+import { bookings, decisions, documents, reviews, tenants } from "./schema";
 import { DEMO_TENANTS } from "./seed";
 
 describe("Demo-Daten", () => {
@@ -69,5 +69,20 @@ describe("Demo-Daten neu laden", () => {
     expect(await resetDemoDataIfOutdated(db)).toBe(true);
     // No markDemoDataLoaded: loading never finished.
     expect(await resetDemoDataIfOutdated(db)).toBe(true);
+  });
+});
+
+describe("Demo-Protokoll", () => {
+  it("Festschreiben kommt nach der Korrektur, wie in echt", async () => {
+    const { db } = await createTestDb();
+    await loadDemoData(db);
+    const [doc] = await db.select().from(documents).where(eq(documents.filename, "allerlei-08.xml"));
+    if (!doc) throw new Error("allerlei-08 fehlt");
+    const [review] = await db.select().from(reviews).where(eq(reviews.documentId, doc.id));
+    const [booking] = await db.select().from(bookings).where(eq(bookings.documentId, doc.id));
+    expect(review?.result).toBe("korrigiert");
+    expect(booking?.lockedAt?.getTime()).toBeGreaterThanOrEqual(
+      review?.createdAt.getTime() ?? Number.POSITIVE_INFINITY,
+    );
   });
 });
