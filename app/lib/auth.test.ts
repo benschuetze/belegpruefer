@@ -29,7 +29,7 @@ describe("Zugang", () => {
   it("Demo-Modus auf einer Datenbank mit echten Mandanten: alles gesperrt statt alles offen", async () => {
     // A wrongly set DEMO_MODE on a real instance would otherwise publish every invoice without a login.
     vi.stubEnv("DEMO_MODE", "true");
-    const { db } = await createTestDb();
+    const { db } = await createTestDb({ as: "owner" });
     await db.insert(tenants).values({ name: "Echte GmbH", beraterNr: 1, mandantenNr: 2 });
     expect(await status(new Request("http://x/belege"), db)).toBe(503);
     expect(await status(new Request("http://x/"), db)).toBe(503);

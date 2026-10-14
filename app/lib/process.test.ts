@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { and, eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { makeBeleg } from "../../tests/helpers/belege";
-import { createTestDb } from "../../tests/helpers/db";
+import { createTestDb, dbRefusal } from "../../tests/helpers/db";
 import { AGREE, fixedModel, NO_RESEARCH, team } from "../../tests/helpers/models";
 import { bookings, decisions, documents, suppliers } from "./db/schema";
 import { DEMO_TENANTS } from "./db/seed";
@@ -137,7 +137,8 @@ describe("Durchstich: XML-Beleg bis zur Buchung", () => {
 
 describe("Abbruch ohne halbe Daten", () => {
   it("scheitert das Schreiben der Buchung, gibt es weder Protokoll noch Buchung, nur Status fehler", async () => {
-    const { db } = await createTestDb();
+    // Owner: the test plants a failing trigger, which the runtime role may not.
+    const { db } = await createTestDb({ as: "owner" });
     const id = await upload(db);
     await db.execute(
       sql`create function boom() returns trigger as $$ begin raise exception 'Platte voll'; end; $$ language plpgsql`,
@@ -207,33 +208,38 @@ describe("Mandantentrennung in der Datenbank", () => {
     const { db } = await createTestDb();
     const idA = await upload(db, A);
     const row = { tenantId: B, documentId: idA, runId: idA, role: "validator" as const };
-    await expect(db.insert(decisions).values(row)).rejects.toThrow();
-    await expect(
-      db.insert(bookings).values({
-        tenantId: B,
-        documentId: idA,
-        bookingDate: TODAY,
-        amountCents: 100,
-        account: "4930",
-        contraAccount: "1600",
-        taxKey: "9",
-        text: "x",
-        reference: "x",
-        source: "manuell",
-      }),
-    ).rejects.toThrow();
+    // Matching the message: a refusal for any other reason (e.g. missing rights) would prove nothing here.
+    expect(await dbRefusal(db.insert(decisions).values(row))).toMatch(/foreign key/);
+    expect(
+      await dbRefusal(
+        db.insert(bookings).values({
+          tenantId: B,
+          documentId: idA,
+          bookingDate: TODAY,
+          amountCents: 100,
+          account: "4930",
+          contraAccount: "1600",
+          taxKey: "9",
+          text: "x",
+          reference: "x",
+          source: "manuell",
+        }),
+      ),
+    ).toMatch(/foreign key/);
   });
 });
 
 describe("Protokoll ist nur anhängend", () => {
-  it("UPDATE und DELETE auf decisions lehnt die Datenbank ab", async () => {
-    const { db } = await createTestDb();
+  // The runtime role lacks the rights anyway (roles.test.ts). The trigger is the second wall: it holds even for
+  // the owner of the tables, so this test runs as owner.
+  it("UPDATE, DELETE und TRUNCATE auf decisions lehnt die Datenbank selbst dem Eigentümer ab", async () => {
+    const { db } = await createTestDb({ as: "owner" });
     const id = await upload(db);
     await processDocument(db, A, id, { models: team(PAPER), research: NO_RESEARCH, today: TODAY });
-    await expect(db.update(decisions).set({ model: "anders" })).rejects.toThrow();
-    await expect(db.delete(decisions)).rejects.toThrow();
-    await expect(db.execute(sql`truncate decisions`)).rejects.toThrow();
-    await expect(db.execute(sql`truncate reviews`)).rejects.toThrow();
+    expect(await dbRefusal(db.update(decisions).set({ model: "anders" }))).toMatch(/nur anhängend/);
+    expect(await dbRefusal(db.delete(decisions))).toMatch(/nur anhängend/);
+    expect(await dbRefusal(db.execute(sql`truncate decisions`))).toMatch(/nur anhängend/);
+    expect(await dbRefusal(db.execute(sql`truncate reviews`))).toMatch(/nur anhängend/);
     expect((await db.select().from(decisions)).length).toBeGreaterThan(0);
   });
 });

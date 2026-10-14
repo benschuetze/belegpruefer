@@ -27,7 +27,8 @@ Belegprüfer verarbeitet Rechnungen mehrerer Mandanten und lässt Sprachmodelle 
 
 | Maßnahme | Test |
 |---|---|
-| Protokoll (`decisions`) und Reviews sind nur anhängend. Ein Datenbank-Trigger lehnt UPDATE, DELETE und TRUNCATE ab. | `app/lib/process.test.ts`, `app/lib/ledger.test.ts` |
+| Die App läuft nicht als Eigentümer ihrer Tabellen. Ihre Rolle `belegpruefer_app` hat je Tabelle nur die nötigen Zeilenrechte: auf Protokoll, Reviews und Exporte nur SELECT und INSERT. Kein ALTER, kein TRUNCATE, keine Trigger abschalten. Migrationen, Seed und Demo-Reset laufen als Eigentümer über `MIGRATION_DATABASE_URL`. Alle DB-Tests laufen unter der Laufzeitrolle, damit ein fehlendes oder überzähliges Recht auffällt. | `app/lib/db/roles.test.ts` |
+| Protokoll (`decisions`) und Reviews sind nur anhängend. Ein Datenbank-Trigger lehnt UPDATE, DELETE und TRUNCATE ab, auch für den Eigentümer. Das ist die zweite Wand hinter den fehlenden Rechten. | `app/lib/process.test.ts`, `app/lib/ledger.test.ts` |
 | Festgeschriebene Buchungen sind unveränderbar, ebenfalls per Trigger. Korrigiert wird nur per Storno plus neuer Buchung im laufenden Zeitraum. | `app/lib/ledger.test.ts`, `tests/e2e/export.spec.ts` |
 | Ein Beleg wird in einer Transaktion verarbeitet: entweder alles oder nichts. Nach einem Abbruch steht er auf „fehler“ und kann erneut verarbeitet werden. | `app/lib/process.test.ts` („Abbruch ohne halbe Daten“) |
 | Buchen und Festschreiben eines Mandanten laufen unter einer Sperre. So rutscht nichts in einen Zeitraum, der gerade geschlossen wird. | `app/lib/process.server.ts` (`lockLedger`) |

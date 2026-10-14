@@ -1,6 +1,6 @@
 import { and, eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { createTestDb } from "../../../tests/helpers/db";
+import { createTestDb, dbRefusal } from "../../../tests/helpers/db";
 import { loadDemoData, markDemoDataLoaded, NotADemoDatabase, resetDemoDataIfOutdated } from "./demo-data";
 import { bookings, decisions, documents, reviews, tenants } from "./schema";
 import { DEMO_TENANTS } from "./seed";
@@ -37,8 +37,9 @@ describe("Demo-Daten", () => {
 });
 
 describe("Demo-Daten neu laden", () => {
+  // The reset is the build's job and runs as owner; the runtime role cannot switch triggers off (roles.test.ts).
   it("lädt bei neuer Version alles neu, sonst nichts; alle Schutz-Trigger sind danach wieder scharf", async () => {
-    const { db } = await createTestDb();
+    const { db } = await createTestDb({ as: "owner" });
     await loadDemoData(db);
     expect(await resetDemoDataIfOutdated(db)).toBe(true);
     expect(await db.$count(documents)).toBe(0);
@@ -47,16 +48,18 @@ describe("Demo-Daten neu laden", () => {
     expect(await resetDemoDataIfOutdated(db)).toBe(false);
     expect(await db.$count(documents)).toBeGreaterThan(20);
 
-    await expect(db.execute(sql`update decisions set model = 'x'`)).rejects.toThrow();
-    await expect(db.execute(sql`delete from decisions`)).rejects.toThrow();
-    await expect(db.execute(sql`update reviews set user_label = 'x'`)).rejects.toThrow();
-    await expect(db.execute(sql`truncate reviews`)).rejects.toThrow();
+    expect(await dbRefusal(db.execute(sql`update decisions set model = 'x'`))).toMatch(/nur anhängend/);
+    expect(await dbRefusal(db.execute(sql`delete from decisions`))).toMatch(/nur anhängend/);
+    expect(await dbRefusal(db.execute(sql`update reviews set user_label = 'x'`))).toMatch(/nur anhängend/);
+    expect(await dbRefusal(db.execute(sql`truncate reviews`))).toMatch(/nur anhängend/);
     // August is festgeschrieben in the demo: still final after the reload.
-    await expect(db.execute(sql`update bookings set account = '4900' where locked_at is not null`)).rejects.toThrow();
+    expect(await dbRefusal(db.execute(sql`update bookings set account = '4900' where locked_at is not null`))).toMatch(
+      /festgeschrieben/,
+    );
   });
 
   it("bricht ab und löscht nichts, sobald ein Mandant außerhalb der Demo existiert", async () => {
-    const { db } = await createTestDb();
+    const { db } = await createTestDb({ as: "owner" });
     await loadDemoData(db);
     const before = await db.$count(decisions);
     await db.insert(tenants).values({ name: "Echte GmbH", beraterNr: 1, mandantenNr: 2 });
@@ -65,7 +68,7 @@ describe("Demo-Daten neu laden", () => {
   });
 
   it("bricht das Laden ab, bleibt die Version alt: der nächste Lauf setzt erneut zurück", async () => {
-    const { db } = await createTestDb();
+    const { db } = await createTestDb({ as: "owner" });
     expect(await resetDemoDataIfOutdated(db)).toBe(true);
     // No markDemoDataLoaded: loading never finished.
     expect(await resetDemoDataIfOutdated(db)).toBe(true);
