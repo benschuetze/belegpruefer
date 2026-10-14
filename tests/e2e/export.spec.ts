@@ -40,6 +40,7 @@ test("Festschreiben, dann DATEV-Datei: EXTF-Kopf, Windows-1252, Umlaute; danach 
 
   await page.goto("/belege?filter=festgeschrieben");
   await page.getByTestId("beleg").click();
+  await expect(page.getByTestId("menschliche-schritte")).toContainText("Festgeschrieben");
   await expect(page.getByRole("button", { name: "Passt, buchen" })).toHaveCount(0);
   await page.getByText("Korrigieren mit Storno").click();
   await page.getByLabel("Konto").selectOption("3400");
@@ -48,6 +49,9 @@ test("Festschreiben, dann DATEV-Datei: EXTF-Kopf, Windows-1252, Umlaute; danach 
   await expect(booked).toContainText("Storno 4930 Bürobedarf");
   await expect(booked).toContainText("−119,00 €");
   await expect(booked).toContainText("3400 Wareneingang 19 % Vorsteuer");
+  await expect(page.getByTestId("menschliche-schritte")).toContainText(
+    "hat die Kontierung geändert: 4930 Bürobedarf, BU 9 → 3400 Wareneingang 19 % Vorsteuer, BU 9",
+  );
 });
 
 test("Festschreiben verweigert, solange im Zeitraum etwas offen ist", async ({ page }) => {

@@ -39,6 +39,11 @@ export function invoiceFile(name: string, lines: LineInput[], overrides: Partial
   return { name, mimeType: "application/xml", buffer: Buffer.from(buildCiiXml(buildBeleg(lines, overrides))) };
 }
 
+/** A prepared invoice as a file, for cases the builder does not produce on its own (e.g. a wrong total). */
+export function belegFile(name: string, beleg: Beleg) {
+  return { name, mimeType: "application/xml", buffer: Buffer.from(buildCiiXml(beleg)) };
+}
+
 export async function upload(page: Page, files: ReturnType<typeof invoiceFile>[]) {
   await page.goto("/belege");
   await page.getByLabel("Rechnungen hochladen").setInputFiles(files);
