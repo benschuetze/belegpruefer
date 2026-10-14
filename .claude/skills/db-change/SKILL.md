@@ -15,6 +15,7 @@ description: Use when adding, changing or removing a table, column, index or enu
 5. `pnpm db:migrate` gegen die lokale bzw. Branch-Datenbank.
 6. `pnpm typecheck`. Alle Stellen anpassen, die durch die neuen Typen brechen.
 7. Seed (`pnpm db:seed`) und Tests anpassen, falls betroffen.
+7a. **Rechte der Laufzeitrolle.** Neue Tabelle: in einer `--custom`-Migration `GRANT … TO belegpruefer_app` mit den knappsten Rechten (Protokoll nur SELECT, INSERT; nie TRUNCATE) und denselben Eintrag in `RIGHTS` in `app/lib/db/roles.test.ts`. Neuer Schreibzugriff auf eine bestehende Tabelle: prüfen, ob das Recht schon da ist. Die Tests laufen als `belegpruefer_app` und zeigen fehlende Rechte.
 8. Commit mit Schema, Migration und Code-Anpassungen zusammen: `feat(db): ...` bzw. `refactor(db): ...`.
 
 ## Konventionen
@@ -28,3 +29,4 @@ description: Use when adding, changing or removing a table, column, index or enu
 - Jede Mandantentabelle hat `tenant_id`, und jeder Index beginnt mit `tenant_id` (Test in `migrations.test.ts`).
 - Trigger, Funktionen und Backfills als `pnpm drizzle-kit generate --custom --name …` und dort von Hand schreiben.
 - Enums als `pgEnum`, Werte englisch.
+- Migrationen, Seed und Demo-Reset laufen als Eigentümer (`MIGRATION_DATABASE_URL`), die App als `belegpruefer_web` (Mitglied von `belegpruefer_app`, angelegt mit `pnpm db:app-login`). Was nur der Eigentümer darf, testet `createTestDb({ as: "owner" })`.

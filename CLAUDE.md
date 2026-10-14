@@ -55,6 +55,9 @@ evals/                    # Eval-Set, Runner, Ergebnis
 - **Mandant nur aus der Session.** Jede Funktion in `app/lib` nimmt `tenantId` als ersten Parameter und filtert darauf. Nie eine `tenantId` aus URL oder Formular übernehmen; einzige Ausnahme ist der Umschalter, der gegen `allowedTenants` prüft. Fremde Belege sehen aus wie nicht vorhandene (404).
 - **Protokoll nur anhängend.** `decisions` und `reviews` nie ändern oder löschen; die Datenbank lehnt es per Trigger ab.
 - **Festgeschrieben ist endgültig.** Korrektur nur als Storno plus neue Buchung (`reverseAndRebook`).
+- **App ohne Eigentümerrechte.** Laufzeit als `belegpruefer_app` (nur Zeilenrechte), Migrationen, Seed und Demo-Reset als Eigentümer über `MIGRATION_DATABASE_URL`. Neue Tabelle → Rechte im Skill `db-change`.
+- **Keine lange Arbeit im Request.** Belege laufen über die Warteschlange (`/verarbeiten`, Lease); Grenzen passen zu Vercel (4,5 MB Body, Timeout).
+- **Schutz lockernde Schalter scheitern geschlossen** (`DEMO_MODE` nur auf reiner Demo-Datenbank). Antworten mit Mandantendaten `Cache-Control: private, no-store`.
 - **Eine Transaktion pro Beleg.** Status, Protokoll, Lieferant und Buchung zusammen oder gar nicht.
 - **Geld in Cent** als Integer. Runden nur in `money.ts`.
 - **Alle Eingänge mit Zod:** Formulare, XML-Felder, jede Modellantwort. Kaputte oder unbekannte Antwort → `pruefen`, nie raten.
