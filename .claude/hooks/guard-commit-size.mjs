@@ -14,7 +14,7 @@
 // could set it are guarded by guard-paths.mjs.
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { decide, findRepoRoot, git, isProjectRepo, readInput, SKR03_PATH, skr03Code } from "./lib.mjs";
+import { decide, findRepoRoot, git, isProjectRepo, note, readInput, SKR03_PATH, skr03Code } from "./lib.mjs";
 import { findCommits } from "./shell.mjs";
 
 const fromEnv = Number(process.env.BELEGPRUEFER_MAX_COMMIT_LINES);
@@ -52,7 +52,8 @@ try {
   if (denied) decide("deny", denied.reason);
   else if (asked) decide("ask", asked.reason);
 } catch {
-  // A bug in the parser must not break every Bash call; CI and review still see the commit.
+  // A bug in the parser must not break every Bash call; CI and review still see the commit. Say so, though.
+  note("Commit-Hook konnte den Befehl nicht prüfen (interner Fehler); Größe und geschützte Pfade sind ungeprüft.");
 }
 
 function check(commit) {

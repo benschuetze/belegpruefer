@@ -66,7 +66,7 @@ export function findRepoRoot(path) {
 /**
  * True for the project itself and its worktrees. The hooks run git, and git runs whatever a repository's config
  * names (core.fsmonitor and friends) outside any sandbox, so a repository planted elsewhere must not be touched.
- * Without CLAUDE_PROJECT_DIR (tests, manual runs) every repository counts.
+ * Without CLAUDE_PROJECT_DIR every repository counts; that is for tests and manual runs only, Claude Code always sets it.
  */
 export function isProjectRepo(root) {
   const project = process.env.CLAUDE_PROJECT_DIR;
@@ -100,14 +100,16 @@ export function git(cwd, args) {
   });
 }
 
-/** Code of skr03.ts without comments and whitespace: any difference is a fachliche change. */
+/** Code of skr03.ts without comments, whitespace collapsed: any difference is a fachliche change. */
 export function skr03Code(text) {
   return (
     text
       // Only comments that start a line: "//" inside a string must not hide the code next to it.
       .replace(/^\s*\/\*[\s\S]*?\*\//gm, "")
       .replace(/^\s*\/\/.*$/gm, "")
-      .replace(/\s+/g, "")
+      // Collapsed, not removed: "Büro bedarf" and "Bürobedarf" are different account names.
+      .replace(/\s+/g, " ")
+      .trim()
   );
 }
 

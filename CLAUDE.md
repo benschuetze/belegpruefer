@@ -84,13 +84,13 @@ Details: Skill `verify`.
 
 ## Nicht ohne Rückfrage ändern
 
-Gilt per Hook (`.claude/settings.json`, `.claude/hooks/`), nicht nur als Bitte. Meldet ein Hook „deny“ oder fragt nach: nicht über Bash umgehen, sondern dem Hinweis folgen oder Ben fragen. Änderungen per Bash fängt der Commit-Hook ab.
+Gilt per Hook (`.claude/settings.json`, `.claude/hooks/`), nicht nur als Bitte. Meldet ein Hook „deny“ oder fragt nach: nicht über Bash umgehen, sondern dem Hinweis folgen oder Ben fragen. Änderungen per Bash fängt der Commit-Hook in den üblichen Fällen ab (Grenzen in `SECURITY.md`).
 
 | Pfad | Hook | Weg |
 |---|---|---|
-| `drizzle/meta/`, committete Migrationen | gesperrt, auch beim Commit | neue Migration (Skill `db-change`); eine neue `--custom`-Datei darf geschrieben werden |
+| `drizzle/meta/`, committete Migrationen | Edit gesperrt; committete Migration auch beim Commit gesperrt | neue Migration (Skill `db-change`); eine neue `--custom`-Datei darf geschrieben werden |
 | `.github/workflows/` (Actions auf SHA, minimale Rechte) | Rückfrage | Diff zeigen, Bens Ja abwarten |
-| `evals/belege.json` (per Regel festgelegt, nie vom Modell) | gesperrt | Vorlagen in `evals/generate.ts` (Rückfrage), dann neu erzeugen |
+| `evals/belege.json` (per Regel festgelegt, nie vom Modell) | Edit gesperrt; beim Commit Rückfrage (neu erzeugt) | Vorlagen in `evals/generate.ts` (Rückfrage), dann neu erzeugen |
 | `app/lib/skr03.ts` (Konten, BU-Schlüssel, Grenzen) | Rückfrage bei jeder Code-Änderung, Kommentare frei | fachlich prüfen lassen (`tax-reviewer`) |
 | `.claude/settings*.json`, `.claude/hooks/` | Rückfrage | die Leitplanken selbst |
 | `.env*` außer `.env.example` | Lesen und Schreiben gesperrt | Werte setzt Ben |

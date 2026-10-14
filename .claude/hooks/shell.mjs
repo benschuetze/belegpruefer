@@ -90,6 +90,7 @@ function parseCommitArgs(args) {
     }
     if (a.startsWith("-") && a.length > 1) {
       for (const [k, ch] of [...a.slice(1)].entries()) {
+        if (ch === "u" || ch === "S") break; // -uall, -S<keyid>: the rest of the word is the value
         if (ch === "a") out.all = true;
         if (ch === "i") out.include = true;
         if (VALUE_SHORT.includes(ch)) {

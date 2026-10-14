@@ -68,6 +68,11 @@ describe("findCommits: Optionen, Pfade und was keine Pfade sind", () => {
     expect(one("git commit -m x -- a.ts")).toMatchObject({ paths: ["a.ts"] });
   });
 
+  it("-uall und -S<keyid> nehmen den Rest des Worts als Wert", () => {
+    expect(one("git commit -uall -m x")).toMatchObject({ all: false, paths: [] });
+    expect(one("git commit -SABC123 -m x")).toMatchObject({ all: false, paths: [] });
+  });
+
   it("-ma ist -m mit der Nachricht a, nicht -a", () => {
     expect(one("git commit -ma")).toMatchObject({ all: false, paths: [] });
   });

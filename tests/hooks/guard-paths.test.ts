@@ -103,6 +103,7 @@ describe("Umwege über die Schreibweise des Pfads", () => {
 
   it("Groß- und Kleinschreibung ändert nichts (macOS und Windows unterscheiden sie nicht)", () => {
     expect(edit("EVALS/belege.json").decision).toBe("deny");
+    expect(edit("Drizzle/0000_INIT.sql").decision).toBe("deny");
     expect(edit(".GitHub/Workflows/ci.yml").decision).toBe("ask");
   });
 
@@ -159,6 +160,10 @@ describe("skr03.ts: Kommentare frei, jede Code-Änderung nur nach Rückfrage", (
     expect(skr(", asset: true", "").decision).toBe("ask");
     expect(skr("80_000", "100_000").decision).toBe("ask");
     expect(skr("rate === 19", "rate === 7").decision).toBe("ask");
+  });
+
+  it("Leerraum in einer Zeichenkette zählt als Änderung", () => {
+    expect(skr('name: "Bürobedarf"', 'name: "Büro bedarf"').decision).toBe("ask");
   });
 
   it("// in einer Zeichenkette ist kein Kommentar", () => {
