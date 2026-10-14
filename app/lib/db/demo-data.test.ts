@@ -1,8 +1,8 @@
 import { and, eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { createTestDb } from "../../../tests/helpers/db";
-import { loadDemoData, resetDemoDataIfOutdated } from "./demo-data";
-import { bookings, documents } from "./schema";
+import { loadDemoData, markDemoDataLoaded, NotADemoDatabase, resetDemoDataIfOutdated } from "./demo-data";
+import { bookings, decisions, documents, tenants } from "./schema";
 import { DEMO_TENANTS } from "./seed";
 
 describe("Demo-Daten", () => {
@@ -37,15 +37,37 @@ describe("Demo-Daten", () => {
 });
 
 describe("Demo-Daten neu laden", () => {
-  it("lädt bei neuer Version alles neu, sonst nichts; die Protokoll-Trigger sind danach wieder scharf", async () => {
+  it("lädt bei neuer Version alles neu, sonst nichts; alle Schutz-Trigger sind danach wieder scharf", async () => {
     const { db } = await createTestDb();
     await loadDemoData(db);
     expect(await resetDemoDataIfOutdated(db)).toBe(true);
     expect(await db.$count(documents)).toBe(0);
     expect(await loadDemoData(db)).toBeGreaterThan(20);
+    await markDemoDataLoaded(db);
     expect(await resetDemoDataIfOutdated(db)).toBe(false);
     expect(await db.$count(documents)).toBeGreaterThan(20);
+
+    await expect(db.execute(sql`update decisions set model = 'x'`)).rejects.toThrow();
     await expect(db.execute(sql`delete from decisions`)).rejects.toThrow();
+    await expect(db.execute(sql`update reviews set user_label = 'x'`)).rejects.toThrow();
     await expect(db.execute(sql`truncate reviews`)).rejects.toThrow();
+    // August is festgeschrieben in the demo: still final after the reload.
+    await expect(db.execute(sql`update bookings set account = '4900' where locked_at is not null`)).rejects.toThrow();
+  });
+
+  it("bricht ab und löscht nichts, sobald ein Mandant außerhalb der Demo existiert", async () => {
+    const { db } = await createTestDb();
+    await loadDemoData(db);
+    const before = await db.$count(decisions);
+    await db.insert(tenants).values({ name: "Echte GmbH", beraterNr: 1, mandantenNr: 2 });
+    await expect(resetDemoDataIfOutdated(db)).rejects.toThrow(NotADemoDatabase);
+    expect(await db.$count(decisions)).toBe(before);
+  });
+
+  it("bricht das Laden ab, bleibt die Version alt: der nächste Lauf setzt erneut zurück", async () => {
+    const { db } = await createTestDb();
+    expect(await resetDemoDataIfOutdated(db)).toBe(true);
+    // No markDemoDataLoaded: loading never finished.
+    expect(await resetDemoDataIfOutdated(db)).toBe(true);
   });
 });

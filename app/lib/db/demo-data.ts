@@ -1,4 +1,4 @@
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, notInArray, sql } from "drizzle-orm";
 import type { BookingLine } from "~/lib/agents/kontierer";
 import { createMockAgentModels } from "~/lib/agents/mock";
 import type { Beleg } from "~/lib/beleg";
@@ -8,7 +8,7 @@ import { confirmDocument, latestProposal, lockPeriod } from "~/lib/ledger.server
 import { buildCiiXml } from "~/lib/parser/build-cii";
 import { processDocument } from "~/lib/process.server";
 import type { Db } from "./client";
-import { documents, meta } from "./schema";
+import { documents, meta, tenants } from "./schema";
 import { DEMO_TENANTS } from "./seed";
 
 /*
@@ -281,18 +281,35 @@ export function demoInvoices(): DemoInvoice[] {
   return [...august, ...september];
 }
 
-/** Raise when the demo invoices or the rules that judge them change, so the public demo shows the current state. */
+/**
+ * Raise by hand when the demo invoices or the rules that judge them change, so the public demo shows the current
+ * state. Forgetting it only leaves the demo outdated; it never touches anything else.
+ */
 export const DEMO_DATA_VERSION = "2026-10-14";
 
+export class NotADemoDatabase extends Error {}
+
 /**
- * Throws away the invented data of the public demo and loads it anew. Only for a database that holds nothing but
- * demo tenants: the protocol tables refuse TRUNCATE by trigger, so the owner switches those triggers off for this one
- * transaction. Never called on a private instance (see scripts/seed.ts).
+ * Throws away the invented data of the public demo when its version is outdated. Refuses (throws, deletes nothing)
+ * as soon as the database holds any tenant or document outside the invented demo tenants: a wrongly set DEMO_MODE
+ * on a real instance must not be able to wipe a protocol. The protocol triggers are switched off only inside this
+ * transaction. The version is written by `markDemoDataLoaded`, after loading succeeded.
  */
 export async function resetDemoDataIfOutdated(db: Db): Promise<boolean> {
-  const [row] = await db.select().from(meta).where(eq(meta.key, "demo_data_version"));
-  if (row?.value === DEMO_DATA_VERSION) return false;
-  await db.transaction(async (tx) => {
+  return db.transaction(async (tx) => {
+    // Two deploys at once: the second waits here and then sees the work already done.
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtext('belegpruefer-demo-reset'))`);
+    const [row] = await tx.select().from(meta).where(eq(meta.key, "demo_data_version"));
+    if (row?.value === DEMO_DATA_VERSION) return false;
+
+    const demoIds = DEMO_TENANTS.map((t) => t.id);
+    const strangers = await tx.$count(tenants, notInArray(tenants.id, demoIds));
+    const strangeDocs = await tx.$count(documents, notInArray(documents.tenantId, demoIds));
+    if (strangers > 0 || strangeDocs > 0) {
+      throw new NotADemoDatabase(
+        "Datenbank enthält Mandanten außerhalb der Demo: Demo-Daten werden nicht zurückgesetzt.",
+      );
+    }
     await tx.execute(sql`alter table decisions disable trigger user`);
     await tx.execute(sql`alter table reviews disable trigger user`);
     await tx.execute(sql`alter table bookings disable trigger user`);
@@ -300,12 +317,15 @@ export async function resetDemoDataIfOutdated(db: Db): Promise<boolean> {
     await tx.execute(sql`alter table decisions enable trigger user`);
     await tx.execute(sql`alter table reviews enable trigger user`);
     await tx.execute(sql`alter table bookings enable trigger user`);
-    await tx
-      .insert(meta)
-      .values({ key: "demo_data_version", value: DEMO_DATA_VERSION })
-      .onConflictDoUpdate({ target: meta.key, set: { value: DEMO_DATA_VERSION } });
+    return true;
   });
-  return true;
+}
+
+export async function markDemoDataLoaded(db: Db): Promise<void> {
+  await db
+    .insert(meta)
+    .values({ key: "demo_data_version", value: DEMO_DATA_VERSION })
+    .onConflictDoUpdate({ target: meta.key, set: { value: DEMO_DATA_VERSION } });
 }
 
 /**
