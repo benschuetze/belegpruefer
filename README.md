@@ -12,7 +12,7 @@ Eingangsrechnungen für mehrere Mandanten: hochladen, auslesen, nach SKR03 konti
 | **Agenten** | Kontierer (`claude-haiku-5-5`), Prüfer auf anderem Modell (`claude-sonnet-5-5`), Recherche mit zwei lesenden Werkzeugen, Extraktor für PDF. Entschieden wird in Code, nicht vom Modell. |
 | **Ergebnis des Evals** | 165 erfundene Belege, vier Aufstellungen gegen das echte Modell: **0 % falsch trotz automatisch** in jeder Aufstellung, Konto richtig 98,8–100 %, gut 70 % automatisch gebucht. Der Kontierer allein (0,016 ct je Beleg) ist hier so gut wie das ganze Team (0,38 ct) – das steht so drin, samt der Korrektur eines früheren Fazits. |
 | **Sicherheit** | Mandant nur aus der Session, Fremdschlüssel je Mandant, Protokoll und Festschreibung per Datenbank-Trigger unveränderbar, zwei Linien gegen Prompt Injection. Details in [SECURITY.md](SECURITY.md). |
-| **Tests** | 241 Unit- und Datenbanktests (Vitest mit PGlite), 16 Nutzerabläufe in Chromium und WebKit (Playwright mit axe), CI auf GitHub Actions. |
+| **Tests** | 244 Unit- und Datenbanktests (Vitest mit PGlite), 16 Nutzerabläufe in Chromium und WebKit (Playwright mit axe), CI auf GitHub Actions. |
 | **Stack** | React Router 7, TypeScript strict, Drizzle, Neon Postgres (Frankfurt), Vercel, Vercel AI SDK mit Claude, Zod, Tailwind, Biome. |
 | **Gebaut** | mit Claude Code und drei Review-Agenten; deren echte Befunde stehen unten unter [Arbeitsweise mit Agenten](#arbeitsweise-mit-agenten). |
 
