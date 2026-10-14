@@ -285,7 +285,7 @@ export function demoInvoices(): DemoInvoice[] {
  * Raise by hand when the demo invoices or the rules that judge them change, so the public demo shows the current
  * state. Forgetting it only leaves the demo outdated; it never touches anything else.
  */
-export const DEMO_DATA_VERSION = "2026-10-14";
+export const DEMO_DATA_VERSION = "2026-10-14.2";
 
 export class NotADemoDatabase extends Error {}
 
@@ -357,7 +357,8 @@ export async function loadDemoData(db: Db): Promise<number> {
           : invoice.confirmWith;
       if (lines) await confirmDocument(db, tenant.id, stored.id, lines, "Demo", "2026-09-02");
     }
-    await lockPeriod(db, tenant.id, "2026-08-01", "2026-08-31", new Date("2026-09-03T08:00:00Z"));
+    // Locked after the confirmations above, at load time: the protocol then reads in the order things happened.
+    await lockPeriod(db, tenant.id, "2026-08-01", "2026-08-31");
   }
   return created;
 }
