@@ -1,0 +1,23 @@
+# Paths from CLAUDE.md "Nicht ohne Rückfrage ändern", plus what guards them.
+# GitHub requests a review from the owner on every PR that touches them. With a single maintainer the ruleset on main
+# does not require code owner approval (GitHub does not let authors approve their own PR); this file documents
+# ownership and becomes binding as soon as a second reviewer exists.
+
+# Generated migrations and snapshots: only via the db-change skill.
+/drizzle/                  @benschuetze
+
+# Expected values and their templates: set by rule, never by a model.
+/evals/belege.json         @benschuetze
+/evals/generate.ts         @benschuetze
+
+# Accounts and tax keys need a fachliche review.
+/app/lib/skr03.ts          @benschuetze
+
+# CI, workflows, this file: actions pinned to SHA, minimal permissions.
+/.github/                  @benschuetze
+
+# The guardrails and the reviewers' rules.
+/.claude/settings.json     @benschuetze
+/.claude/hooks/            @benschuetze
+/.claude/agents/           @benschuetze
+/CLAUDE.md                 @benschuetze
