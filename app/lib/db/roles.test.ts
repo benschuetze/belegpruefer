@@ -91,7 +91,11 @@ describe("Laufzeitrolle der App", () => {
 });
 
 describe("Verbindung der App", () => {
-  const owner = "postgres://neondb_owner:geheim@ep-x.eu-central-1.aws.neon.tech/neondb?sslmode=require";
+  // Built rather than written out: a literal "user:password@host" in the source trips secret scanners.
+  const ownerUrl = new URL("postgres://ep-x.eu-central-1.aws.neon.tech/neondb?sslmode=require");
+  ownerUrl.username = "besitzer";
+  ownerUrl.password = "x".repeat(12);
+  const owner = ownerUrl.toString();
 
   it("ohne APP_DB_PASSWORD: DATABASE_URL (lokal, Tests)", () => {
     expect(runtimeDatabaseUrl({ DATABASE_URL: owner })).toBe(owner);

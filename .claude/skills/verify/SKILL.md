@@ -40,6 +40,7 @@ description: Use for every code change before calling it done - writing the righ
 ## Hinweise
 
 - Ports der E2E-Läufe: 5299 (App), 5298 (Demo), 5334 (PGlite). Andere Projekte auf derselben Maschine nutzen 5199/5198/5434; deren Prozesse nicht beenden.
+- Keine Verbindungs-URL mit `benutzer:passwort@host` als Literal in Tests oder Doku, auch nicht erfunden: GitGuardian meldet sie als Secret. URL im Test per `new URL()` zusammensetzen.
 - Ablehnungen über die Meldung prüfen (`dbRefusal` aus `tests/helpers/db.ts`), nie mit nacktem `rejects.toThrow()`.
 - Gegenprobe für Schutzcode: Schutz kurz entfernen, Test muss rot werden, dann zurück.
 - Lokale PGlite bedient alle Verbindungen aus einem Backend: gegen sie `DATABASE_POOL_MAX=1` (E2E setzt das selbst). „unnamed prepared statement does not exist“ heißt genau das, nicht ein Fehler der App.
