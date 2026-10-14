@@ -3,9 +3,9 @@ import { createDb } from "~/lib/db/client";
 import { loadDemoData, markDemoDataLoaded, resetDemoDataIfOutdated } from "~/lib/db/demo-data";
 import { seed } from "~/lib/db/seed";
 
-// Owner: creating tenants and the demo reset are beyond the runtime role, on purpose.
-const url = process.env.MIGRATION_DATABASE_URL || process.env.DATABASE_URL;
-if (!url) throw new Error("MIGRATION_DATABASE_URL oder DATABASE_URL fehlt");
+// Owner (DATABASE_URL), not the app's role: creating tenants and the demo reset are beyond it, on purpose.
+const url = process.env.DATABASE_URL;
+if (!url) throw new Error("DATABASE_URL fehlt");
 const db = createDb(url);
 await seed(db);
 console.log("Mandanten angelegt");

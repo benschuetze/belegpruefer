@@ -20,6 +20,7 @@
     "db:migrate": "tsx scripts/migrate.ts",
     "db:seed": "tsx scripts/seed.ts",
     "db:app-login": "tsx scripts/create-app-login.ts",
+    "db:check-app-role": "tsx scripts/check-app-role.ts",
     "db:local": "tsx scripts/local-db.ts",
     "eval": "tsx evals/run.ts",
     "security:osv": "tsx scripts/osv-check.ts",

@@ -29,4 +29,4 @@ description: Use when adding, changing or removing a table, column, index or enu
 - Jede Mandantentabelle hat `tenant_id`, und jeder Index beginnt mit `tenant_id` (Test in `migrations.test.ts`).
 - Trigger, Funktionen und Backfills als `pnpm drizzle-kit generate --custom --name …` und dort von Hand schreiben.
 - Enums als `pgEnum`, Werte englisch.
-- Migrationen, Seed und Demo-Reset laufen als Eigentümer (`MIGRATION_DATABASE_URL`), die App als `belegpruefer_web` (Mitglied von `belegpruefer_app`, angelegt mit `pnpm db:app-login`). Was nur der Eigentümer darf, testet `createTestDb({ as: "owner" })`.
+- Migrationen, Seed und Demo-Reset laufen als Eigentümer (`DATABASE_URL`), die App über `APP_DATABASE_URL` als `belegpruefer_web` (Mitglied von `belegpruefer_app`, angelegt mit `pnpm db:app-login`). Was nur der Eigentümer darf, testet `createTestDb({ as: "owner" })`.

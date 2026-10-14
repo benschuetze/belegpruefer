@@ -4,18 +4,25 @@ import { createTestDb, dbRefusal } from "../../../tests/helpers/db";
 
 /**
  * Every table and what the runtime role may do with it. A new table without an entry here fails the first test:
- * deciding its rights is part of adding it (skill db-change).
+ * deciding its rights is part of adding it (skill db-change). UPDATE is granted per column, listed separately.
  */
 const RIGHTS: Record<string, string[]> = {
   tenants: ["SELECT"],
-  suppliers: ["SELECT", "INSERT", "UPDATE"],
-  documents: ["SELECT", "INSERT", "UPDATE"],
-  meta: ["SELECT", "INSERT", "UPDATE"],
-  bookings: ["SELECT", "INSERT", "UPDATE", "DELETE"],
+  suppliers: ["SELECT", "INSERT"],
+  documents: ["SELECT", "INSERT"],
+  meta: ["SELECT", "INSERT"],
+  bookings: ["SELECT", "INSERT", "DELETE"],
   decisions: ["SELECT", "INSERT"],
   reviews: ["SELECT", "INSERT"],
   exports: ["SELECT", "INSERT"],
   login_attempts: ["SELECT", "INSERT", "DELETE"],
+};
+/** Columns the code changes after insert; nothing else may be updated, in particular not file and hash. */
+const UPDATABLE: Record<string, string[]> = {
+  documents: ["error", "extracted_jsonb", "findings_jsonb", "processing_started_at", "status"],
+  suppliers: ["profile_jsonb", "profile_source", "ust_id"],
+  meta: ["value"],
+  bookings: ["locked_at"],
 };
 const ALL = ["SELECT", "INSERT", "UPDATE", "DELETE", "TRUNCATE", "REFERENCES", "TRIGGER"];
 
@@ -37,6 +44,17 @@ describe("Laufzeitrolle der App", () => {
         if (res.rows[0]?.ok) granted.push(right);
       }
       expect(granted, table).toEqual(RIGHTS[table]);
+
+      const columns = await client.query<{ column_name: string; ok: boolean }>(
+        `select column_name, has_column_privilege('belegpruefer_app', table_schema || '.' || table_name, column_name,
+           'UPDATE') as ok from information_schema.columns where table_schema = 'public' and table_name = $1
+         order by column_name`,
+        [table],
+      );
+      expect(
+        columns.rows.filter((c) => c.ok).map((c) => c.column_name),
+        `${table}: UPDATE`,
+      ).toEqual(UPDATABLE[table] ?? []);
     }
   });
 
@@ -60,6 +78,11 @@ describe("Laufzeitrolle der App", () => {
     ["Export löschen", "delete from exports"],
     ["Mandant anlegen", "insert into tenants (name, berater_nr, mandanten_nr) values ('X', 1, 2)"],
     ["Migrationen lesen", "select * from drizzle.__drizzle_migrations"],
+    ["Datei eines Belegs tauschen", "update documents set content_base64 = 'eA=='"],
+    ["Hash eines Belegs ändern", "update documents set sha256 = 'x'"],
+    ["Beleg einem anderen Mandanten zuschieben", "update documents set tenant_id = gen_random_uuid()"],
+    ["Betrag einer Buchung ändern", "update bookings set amount_cents = 1"],
+    ["eigene Tabelle anlegen", "create table x (a int)"],
   ])("verweigert: %s", async (_, statement) => {
     const { db } = await createTestDb();
     expect(await dbRefusal(db.execute(sql.raw(statement)))).toMatch(/permission denied|must be owner/);

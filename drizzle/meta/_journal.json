@@ -50,6 +50,13 @@
       "when": 1791962154378,
       "tag": "0006_verarbeitung_lease",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1791963260881,
+      "tag": "0007_beleg_unveraenderbar",
+      "breakpoints": true
     }
   ]
 }

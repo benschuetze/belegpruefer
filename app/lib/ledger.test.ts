@@ -84,9 +84,36 @@ describe("Festschreiben und Storno", () => {
   it("festgeschriebene Buchungen kann die Datenbank weder ändern noch löschen", async () => {
     const { db } = await setup();
     await lockPeriod(db, A, "2026-09-01", "2026-09-30");
-    // The runtime role may change unlocked bookings; for locked ones the trigger says no.
-    expect(await dbRefusal(db.update(bookings).set({ account: "4900" }))).toMatch(/festgeschrieben/);
+    // The runtime role may only set locked_at and delete unlocked bookings; for locked ones the trigger says no.
+    expect(await dbRefusal(db.update(bookings).set({ lockedAt: null }))).toMatch(/festgeschrieben/);
     expect(await dbRefusal(db.delete(bookings))).toMatch(/festgeschrieben/);
+  });
+
+  it("festgeschriebene Buchungen bleiben auch für den Eigentümer der Tabellen endgültig", async () => {
+    const { db } = await setup(PAPER, undefined, "owner");
+    await lockPeriod(db, A, "2026-09-01", "2026-09-30");
+    expect(await dbRefusal(db.update(bookings).set({ account: "4900" }))).toMatch(/festgeschrieben/);
+  });
+
+  it("ein Beleg behält Datei und Inhalt; festgeschrieben geht er nur per Storno zurück", async () => {
+    const { db, id } = await setup(PAPER, undefined, "owner");
+    expect(await dbRefusal(db.update(documents).set({ content: "eA==" }).where(eq(documents.id, id)))).toMatch(
+      /unveränderbar/,
+    );
+    expect(
+      await dbRefusal(
+        db
+          .update(documents)
+          .set({ findings: [{ code: "x", severity: "hinweis", message: "nachträglich" }] })
+          .where(eq(documents.id, id)),
+      ),
+    ).toMatch(/nur während der Verarbeitung/);
+    await lockPeriod(db, A, "2026-09-01", "2026-09-30");
+    expect(await dbRefusal(db.update(documents).set({ status: "neu" }).where(eq(documents.id, id)))).toMatch(
+      /nur Storno/,
+    );
+    // The Storno path itself still works.
+    await reverseAndRebook(db, A, id, PAPER.zeilen, "Demo", TODAY);
   });
 
   it("Festschreiben verweigert, solange im Zeitraum Belege offen sind", async () => {
