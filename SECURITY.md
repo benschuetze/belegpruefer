@@ -47,6 +47,9 @@ Belegprüfer verarbeitet Rechnungen mehrerer Mandanten und lässt Sprachmodelle 
 
 ## Bekannte Grenzen
 
+- **Prompt Injection über PDF bleibt ein Restrisiko.** Ob ein Belegtext nach einer Anweisung klingt, erkennt eine Liste regulärer Ausdrücke (`app/lib/validator.ts`). Umformulierter Text kommt durch, ebenso versteckter, etwa weiße Schrift auf weißem Grund: Das Modell bekommt die Textebene des PDFs mit. Schlimmstenfalls folgen beide Agenten dem Text, und der Beleg wird automatisch auf ein plausibles, aber falsches Konto gebucht. Festschreiben verlangt nur, dass nichts mehr offen ist; eine automatische Buchung muss vorher kein Mensch gesehen haben.
+  Was den Schaden begrenzt: Konten und BU-Schlüssel sind ein Enum, Summen und Steuer rechnet Code nach, das Gegenkonto setzt Code, die App bezahlt nichts, und jede Buchung steht mit Begründung im Protokoll. Gegenmaßnahme, noch nicht gebaut: vor dem Festschreiben eine Stichprobe automatischer Buchungen vorlegen, zum Beispiel jede zehnte und alle von neuen Lieferanten, und erst nach dem Abhaken festschreiben.
+
 - Sitzungen sind zustandslos. Eine kopierte Session bleibt bis zu sieben Tage gültig, widerrufen lassen sich alle nur über ein neues Passwort.
 - Row Level Security in Postgres ist noch nicht umgesetzt. Die Trennung liegt in der Anwendung und in den Fremdschlüsseln.
 - Ein Passwort pro Instanz, keine Benutzerverwaltung.
