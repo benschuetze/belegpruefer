@@ -70,11 +70,11 @@ describe("Logs ohne Belegdaten", () => {
       name: "AI_APICallError",
       statusCode: 400,
       responseBody: '{"error":"invalid_request_error"}',
-      requestBodyValues: { messages: [{ content: "REWE Markt Kartenzahlung -45.10 DE89370400440532013000" }] },
+      requestBodyValues: { messages: [{ content: "Papierwerk Sommer KG, Rechnung PW-2026-0815, 148.60 EUR" }] },
     });
     const logged = safeError(apiError);
     expect(logged).toBe('AI_APICallError · HTTP 400 · Bad Request · Antwort: {"error":"invalid_request_error"}');
-    expect(logged).not.toMatch(/REWE|DE89|45\.10/);
+    expect(logged).not.toMatch(/Papierwerk|PW-2026|148\.60/);
   });
 });
 

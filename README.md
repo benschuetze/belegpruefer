@@ -2,9 +2,35 @@
 
 Eingangsrechnungen für mehrere Mandanten: hochladen, auslesen, nach SKR03 kontieren, von einem zweiten Agenten prüfen lassen, automatisch buchen oder dir vorlegen, festschreiben, als DATEV-Buchungsstapel exportieren. Dazu eine Messung, ob sich das Agenten-Team gegenüber einem einzelnen Modell lohnt.
 
-**Demo:** https://belegpruefer-demo.vercel.app · schreibgeschützt, zwei erfundene Mandanten, erfundene Rechnungen; die Agenten laufen dort als feste Stichwort-Modelle („Mockdaten“), die Zahlen unter „Eval“ stammen aus dem echten Lauf. Eigenes Vercel-Projekt mit eigener Neon-Datenbank (Frankfurt), `DEMO_MODE=true`, `AI_MOCK=1`; gebaut wird nur `main` (`ignoreCommand` in `vercel.json`), weil Branch-Previews dieselbe Datenbank und deren Migrationen träfen.
+**Demo:** https://belegpruefer-demo.vercel.app — schreibgeschützt, ohne Login, zwei erfundene Mandanten.
 
-Die Startseite beantwortet eine Frage: **Wie viele Belege sind fertig, wie viele brauchen dich?**
+## Auf einen Blick
+
+| | |
+|---|---|
+| **Frage der Startseite** | Wie viele Belege sind fertig, wie viele brauchen dich? |
+| **Agenten** | Kontierer (`claude-haiku-5-5`), Prüfer auf anderem Modell (`claude-sonnet-5-5`), Recherche mit zwei lesenden Werkzeugen, Extraktor für PDF. Entschieden wird in Code, nicht vom Modell. |
+| **Ergebnis des Evals** | 165 erfundene Belege, vier Aufstellungen gegen das echte Modell: **0 % falsch trotz automatisch**, 98,8 % Konto richtig, 71,5 % automatisch gebucht, 0,38 ct je Beleg. Der Prüfer verhindert auf diesem Set nichts zusätzlich – das steht so drin. |
+| **Sicherheit** | Mandant nur aus der Session, Fremdschlüssel je Mandant, Protokoll und Festschreibung per Datenbank-Trigger unveränderbar, zwei Linien gegen Prompt Injection. Details in [SECURITY.md](SECURITY.md). |
+| **Tests** | 230 Unit- und Datenbanktests (Vitest mit PGlite), 15 Nutzerabläufe in Chromium und WebKit (Playwright mit axe), CI auf GitHub Actions. |
+| **Stack** | React Router 7, TypeScript strict, Drizzle, Neon Postgres (Frankfurt), Vercel, Vercel AI SDK mit Claude, Zod, Tailwind, Biome. |
+| **Gebaut** | mit Claude Code und drei Review-Agenten; deren echte Befunde stehen unten unter [Arbeitsweise mit Agenten](#arbeitsweise-mit-agenten). |
+
+![Prüfansicht: Beleg links, Vorschlag, Einwand und Befunde rechts, darunter das Protokoll](docs/screenshots/pruefen.png)
+
+### In fünf Minuten durch die Demo
+
+1. **Heute** – die Hauptzahl: fünf Belege brauchen dich. „Wie gerechnet?“ zeigt, woraus sie sich zusammensetzt.
+2. **Belege → Brauchen dich → Druckerei Halbmond** – eine Rechnung, deren Positionstext der Buchhaltung Anweisungen gibt. Der Kontierer folgt ihr nicht, der Validator meldet sie, der Beleg wartet auf einen Menschen. Darunter das Protokoll jedes Schritts mit Modell, Prompt-Version und Konfidenz.
+3. **Bistro Kranich**, **Elektro Brandt (Laptop)**, **Papierwerk (Summe falsch)** – Bewirtung ohne Anlass, Anlagevermögen, Rechenfehler: jeder aus einem anderen Grund in „prüfen“. **Clickwave Ads** (Irland, Reverse Charge) ging dagegen automatisch durch.
+4. **Export → August** – festgeschrieben, die DATEV-Datei lädt herunter. September ist noch offen; dort zeigt die Seite, was vor dem Festschreiben fehlt.
+5. **Eval** – die Ablationstabelle aus dem echten Lauf, Kalibrierung, Begründung der Schwelle.
+
+Oben rechts wechselt der Umschalter zur **Rösterei Lindgrün UG**: anderer Mandant, eigene Belege, nichts vom ersten sichtbar. In der Demo laufen die Agenten als feste Stichwort-Modelle („Mockdaten“), damit sie nichts kostet; die Zahlen unter „Eval“ kommen aus dem Lauf gegen das echte Modell.
+
+| Start | Eval | Handy, Nachtmodus |
+|---|---|---|
+| ![Startseite](docs/screenshots/start.png) | ![Eval-Seite](docs/screenshots/eval.png) | ![Startseite auf dem Handy im Nachtmodus](docs/screenshots/handy-nacht.png) |
 
 ## Was es kann
 
@@ -127,6 +153,8 @@ Grenzen der Messung: ein Lauf je Aufstellung, keine Wiederholungen (Unterschiede
 **Prompt Injection, zwei Linien.** Erstens geht Belegtext nur als abgegrenzte Daten an die Modelle. Zweitens erkennt der Validator Text, der wie eine Anweisung an die Buchhaltung aussieht („buche auf 4900“, „Konfidenz 1“, „SYSTEM:“, ein schließendes `</beleg>`), in jedem Freitextfeld; so ein Beleg geht immer zu einem Menschen, auch wenn beide Agenten der Anweisung folgen würden. Ein Test spielt genau diesen schlimmsten Fall für alle Injection-Belege des Eval-Sets durch.
 
 **Prüfer auf anderem Modell.** Zwei Aufrufe desselben Modells teilen dessen blinde Flecken. Der Prüfer läuft auf einem stärkeren Modell und sieht die Konfidenz des Kontierers nicht, damit er die Buchung beurteilt und nicht die Selbsteinschätzung.
+
+**Demo-Betrieb.** Eigenes Vercel-Projekt mit eigener Neon-Datenbank in Frankfurt, `DEMO_MODE=true` (nur lesen, kein Login, nur der Mandanten-Umschalter schreibt) und `AI_MOCK=1` (Stichwort-Modelle statt API, die Demo kostet nichts). Beim Build laufen Migrationen und das Laden der erfundenen Belege; gebaut wird nur `main` (`ignoreCommand` in `vercel.json`), weil Branch-Previews dieselbe Datenbank und deren Migrationen träfen.
 
 **Ablage.** Dateien liegen vorerst Base64-kodiert in Postgres (`storage_key = 'db'`). Das reicht für die Demo und hält alles in einer Transaktion; für echte Mengen gehört das in einen Objektspeicher mit Object Lock (siehe Grenzen).
 
