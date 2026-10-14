@@ -1,4 +1,4 @@
-import { and, eq, notInArray, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import type { BookingLine } from "~/lib/agents/kontierer";
 import { createMockAgentModels } from "~/lib/agents/mock";
 import type { Beleg } from "~/lib/beleg";
@@ -8,8 +8,8 @@ import { confirmDocument, latestProposal, lockPeriod } from "~/lib/ledger.server
 import { buildCiiXml } from "~/lib/parser/build-cii";
 import { processDocument } from "~/lib/process.server";
 import type { Db } from "./client";
-import { documents, meta, tenants } from "./schema";
-import { DEMO_TENANTS } from "./seed";
+import { documents, meta } from "./schema";
+import { DEMO_TENANTS, holdsOnlyDemoTenants } from "./seed";
 
 /*
  * Invented companies, invented invoices. Any resemblance to a real business is accidental; VAT ids follow the
@@ -302,10 +302,7 @@ export async function resetDemoDataIfOutdated(db: Db): Promise<boolean> {
     const [row] = await tx.select().from(meta).where(eq(meta.key, "demo_data_version"));
     if (row?.value === DEMO_DATA_VERSION) return false;
 
-    const demoIds = DEMO_TENANTS.map((t) => t.id);
-    const strangers = await tx.$count(tenants, notInArray(tenants.id, demoIds));
-    const strangeDocs = await tx.$count(documents, notInArray(documents.tenantId, demoIds));
-    if (strangers > 0 || strangeDocs > 0) {
+    if (!(await holdsOnlyDemoTenants(tx))) {
       throw new NotADemoDatabase(
         "Datenbank enthält Mandanten außerhalb der Demo: Demo-Daten werden nicht zurückgesetzt.",
       );

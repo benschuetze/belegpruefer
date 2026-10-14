@@ -3,6 +3,7 @@ import { asc } from "drizzle-orm";
 import { createCookieSessionStorage, redirect } from "react-router";
 import type { Db } from "~/lib/db/client";
 import { type Tenant, tenants } from "~/lib/db/schema";
+import { holdsOnlyDemoTenants } from "~/lib/db/seed";
 
 export function isDemo(): boolean {
   return process.env.DEMO_MODE === "true";
@@ -140,13 +141,32 @@ const PUBLIC_PATHS = new Set(["/login", "/favicon.ico"]);
 /** Writes the read-only demo still allows: choosing which invented company to look at. */
 const DEMO_WRITES = new Set(["/mandant"]);
 
+const DEMO_CHECK_TTL_MS = 60_000;
+const demoChecks = new WeakMap<Db, { safe: boolean; at: number }>();
+
+/**
+ * The public demo drops the login, so it must never run on a database with real clients. Checked once a minute per
+ * database rather than per request; the demo cannot add tenants itself, a new one only arrives with a deploy.
+ */
+async function demoModeSafe(db: Db): Promise<boolean> {
+  const cached = demoChecks.get(db);
+  if (cached && Date.now() - cached.at < DEMO_CHECK_TTL_MS) return cached.safe;
+  const safe = await holdsOnlyDemoTenants(db);
+  demoChecks.set(db, { safe, at: Date.now() });
+  return safe;
+}
+
 /** One gate for every loader and action. Demo: read-only for everyone. Private instance: nothing without login. */
-export async function guard(request: Request): Promise<void> {
+export async function guard(request: Request, db: Db): Promise<void> {
   const url = new URL(request.url);
   const path = url.pathname.replace(/\.data$/, "") || "/";
   const writing = request.method !== "GET" && request.method !== "HEAD";
 
   if (isDemo()) {
+    // Fail closed: a misconfigured instance answers nothing instead of everything.
+    if (!(await demoModeSafe(db))) {
+      throw new Response("Demo-Modus verweigert: Die Datenbank enthält Mandanten außerhalb der Demo.", { status: 503 });
+    }
     if (writing && !DEMO_WRITES.has(path)) throw new Response("Die Demo ist schreibgeschützt.", { status: 403 });
     if (path === "/login") throw redirect("/");
     return;
