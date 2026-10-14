@@ -68,8 +68,8 @@ describe("Bewertung", () => {
       costCentsPerDoc: 1,
       secondsPerDoc: 2,
     });
-    expect(s.calibration.find((b) => b.range === "0,9–1,0")).toEqual({ range: "0,9–1,0", n: 1, accuracy: 1 });
-    expect(s.calibration.find((b) => b.range === "0–0,6")).toEqual({ range: "0–0,6", n: 1, accuracy: 0 });
+    expect(s.calibration.find((b) => b.range === "[0,9; 1]")).toEqual({ range: "[0,9; 1]", n: 1, accuracy: 1 });
+    expect(s.calibration.find((b) => b.range === "[0; 0,6)")).toEqual({ range: "[0; 0,6)", n: 1, accuracy: 0 });
   });
 
   it("Schwellen-Raster: höhere Schwelle, weniger automatisch", () => {
