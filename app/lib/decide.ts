@@ -4,7 +4,7 @@ import type { PrueferOutput } from "~/lib/agents/pruefer";
 import { type Beleg, isForeignEu, mentionsReverseCharge, supplierCountry } from "~/lib/beleg";
 import type { Finding } from "~/lib/db/schema";
 import { accountByNumber, REVERSE_CHARGE_KEY, taxKeyForRate } from "~/lib/skr03";
-import { hasErrors, validateBooking } from "~/lib/validator";
+import { hasErrors, LIEFERSCHEIN_CODE, validateBooking } from "~/lib/validator";
 
 /**
  * From the eval (evals/ergebnis.json, README "Eval"): every wrong account had a confidence of 0.80 or less, so the
@@ -59,6 +59,10 @@ export function decide(input: DecisionInput): Outcome {
   const bookingFindings: Finding[] = [];
 
   if (hasErrors(input.findings)) reasons.push("Der Validator hat Fehler auf dem Beleg gefunden.");
+  // Only a hint on the document, but no account choice makes it bookable before the delivery note is there.
+  if (input.findings.some((f) => f.code === LIEFERSCHEIN_CODE)) {
+    reasons.push("Die Leistung steht nur auf dem Lieferschein: erst den Lieferschein anfordern, dann buchen.");
+  }
 
   // A service from outside the EU without German VAT is § 13b (2) UStG; its tax key is not one this app sets alone.
   if (supplierCountry(input.beleg) !== "DE" && !isForeignEu(input.beleg) && input.beleg.totals.taxCents === 0) {

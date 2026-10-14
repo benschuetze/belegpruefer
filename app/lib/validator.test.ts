@@ -166,3 +166,24 @@ describe("Anweisungen im Belegtext", () => {
     expect(codes(validateBeleg(beleg, TODAY))).not.toContain("anweisung_im_beleg");
   });
 });
+
+describe("Leistung nur über Lieferschein beschrieben", () => {
+  it.each([
+    "Diverses laut Lieferschein 5871",
+    "Div. lt. Lieferschein 12",
+    "Waren gemäß Lieferschein Nr. 88",
+    "Verschiedenes siehe LS 4711",
+  ])("%s → Hinweis", (text) => {
+    const found = validateBeleg(makeBeleg([{ description: text, netCents: 4130 }]), TODAY);
+    expect(found.find((f) => f.code === "leistung_nur_lieferschein")?.severity).toBe("hinweis");
+  });
+
+  it.each(["Kopierpapier A4 laut Lieferschein 123", "Rohkaffee Brasil, 60 kg, gemäß Lieferschein 9"])(
+    "%s nennt die Ware: kein Hinweis",
+    (text) => {
+      expect(codes(validateBeleg(makeBeleg([{ description: text, netCents: 4130 }]), TODAY))).not.toContain(
+        "leistung_nur_lieferschein",
+      );
+    },
+  );
+});
