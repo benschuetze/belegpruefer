@@ -47,9 +47,11 @@ Oben rechts wechselt der Umschalter zur **Rösterei Lindgrün UG**: anderer Mand
 ## Architektur
 
 ```
- Upload (XML/PDF)
+ Upload (XML/PDF, zusammen ≤ 4 MB)  speichert nur und antwortet sofort
       │  SHA-256 je Mandant → neu | Duplikat | abgelehnt (mit Grund)
       ▼
+ Warteschlange = documents.status 'neu'; POST /verarbeiten nimmt je Aufruf ≤ 3 (Lease 5 min)
+      │
  ┌──────────────┐  XML   ┌────────────┐
  │  documents   ├───────►│  Parser    │  Code, CII (XRechnung, ZUGFeRD)
  │  status=neu  │  PDF   ├────────────┤
@@ -157,6 +159,10 @@ Grenzen der Messung: ein Lauf je Aufstellung, keine Wiederholungen (Unterschiede
 
 **Demo-Betrieb.** Eigenes Vercel-Projekt mit eigener Neon-Datenbank in Frankfurt, `DEMO_MODE=true` (nur lesen, kein Login, nur der Mandanten-Umschalter schreibt) und `AI_MOCK=1` (Stichwort-Modelle statt API, die Demo kostet nichts). Beim Build laufen Migrationen und das Laden der erfundenen Belege; gebaut wird nur `main` (`ignoreCommand` in `vercel.json`), weil Branch-Previews dieselbe Datenbank und deren Migrationen träfen.
 
+**Verarbeitung nicht im Upload-Request.** Ein Beleg braucht mit beiden Agenten einige Sekunden; 20 davon im Upload-Request kämen an das Funktions-Timeout. Der Upload speichert deshalb nur, und die Tabelle `documents` ist die Warteschlange (`status = 'neu'`). `POST /verarbeiten` nimmt je Aufruf höchstens drei Belege; die Seite ruft es auf, solange etwas wartet, und zeigt den Stand. Beansprucht wird mit Zeitstempel (`processing_started_at`): Stirbt ein Lauf, übernimmt nach fünf Minuten ein anderer. Der alte kann danach nichts mehr schreiben, weil die Schlusstransaktion prüft, dass der Beleg noch ihm gehört. Es gibt also kein zweites Protokoll und keine doppelte Buchung. Mit echtem Betrieb würde ein Cron oder Queue-Consumer dieselbe Funktion `processQueue` aufrufen statt der offenen Seite; Lease und Transaktion blieben, wie sie sind.
+
+**Zwei Datenbankrollen.** Die App läuft nicht als Eigentümer ihrer Tabellen, sondern als `belegpruefer_app`, mit Zeilenrechten je Tabelle: auf Protokoll, Reviews und Exporte nur SELECT und INSERT, nirgends ALTER oder TRUNCATE. Die Trigger kann sie also weder abschalten noch umgehen. Migrationen, Seed und Demo-Reset laufen als Eigentümer (`MIGRATION_DATABASE_URL`). Alle DB-Tests laufen unter der Laufzeitrolle, und `roles.test.ts` hält die Rechte je Tabelle fest. Eine neue Tabelle ohne Rechte-Entscheidung lässt den Test scheitern.
+
 **Ablage.** Dateien liegen vorerst Base64-kodiert in Postgres (`storage_key = 'db'`). Das reicht für die Demo und hält alles in einer Transaktion; für echte Mengen gehört das in einen Objektspeicher mit Object Lock (siehe Grenzen).
 
 ## Fachlich offen
@@ -178,7 +184,9 @@ Vor einem echten Einsatz von einer Steuerberaterin prüfen lassen:
 - Nur Eingangsrechnungen, nur SKR03, nur EUR, nur CII (kein UBL), keine Gutschriften.
 - Keine Bankanbindung, kein Zahlungsabgleich. Gegenkonto ist immer 1600.
 - Ein Passwort pro Instanz, keine Benutzerverwaltung; in der Demo wählt ein Umschalter den Mandanten. Sessions sind zustandslose, signierte Cookies: Abmelden löscht das Cookie, eine kopierte Session bleibt aber bis zu sieben Tage gültig; widerrufen lassen sich alle nur über ein neues Passwort. Die Login-Bremse zählt je IP (fünf Versuche in 15 Minuten), damit niemand den Inhaber global aussperren kann.
-- Dateien in der Datenbank statt in einem Objektspeicher.
+- Dateien in der Datenbank statt in einem Objektspeicher. Ein Upload darf zusammen höchstens 4 MB groß sein, weil Vercel größere Request-Bodies abweist; größere Stapel gingen direkt vom Browser in einen Objektspeicher.
+- Die Warteschlange läuft, solange jemand die App offen hat; schließt man sie, geht es beim nächsten Öffnen weiter. Ein Cron als zweiter Antrieb ist vorgesehen, aber nicht eingerichtet.
+- Auf Vercel sieht die Laufzeit dieselben Umgebungsvariablen wie der Build, also auch `MIGRATION_DATABASE_URL`. Die Rollentrennung schützt gegen Fehler im Code, SQL-Injection und eine geleakte `DATABASE_URL`, aber nicht gegen jemanden, der die ganze Umgebung der Funktion ausliest. Dafür müssten die Migrationen aus der CI laufen, mit einem Secret, das nur die CI hat.
 - Handy: lesbar ab 375 px, nicht dafür optimiert.
 
 ## Arbeitsweise mit Agenten
@@ -214,6 +222,16 @@ Danach hat `tax-reviewer` die Erwartungswerte des Eval-Sets und die Kontenlogik 
 | Reverse Charge nur für EU gedacht; Drittland ist auch § 13b, aber mit anderem Schlüssel. | Drittland immer zur Prüfung, eigene Eval-Fälle. |
 | Kleinbetragsprivileg galt auch für Reverse Charge (§ 33 Satz 3 UStDV schließt das aus); Anschrift des Empfängers wurde nicht geprüft. | Beides im Validator. |
 | WJ-Beginn im DATEV-Kopf falsch bei abweichendem Wirtschaftsjahr. | Richtig berechnet, Stapel über zwei Wirtschaftsjahre abgelehnt. |
+
+Später kam eine Review von außen über den fertigen Stand. Fünf Befunde, alle mit Test behoben oder als Grenze dokumentiert:
+
+| Befund | Folge |
+|---|---|
+| Die Append-only-Trigger schützten nicht vor der App selbst: Sie lief als Eigentümer der Tabellen, und der Demo-Reset schaltet die Trigger per `ALTER TABLE` ab. | Zwei Rollen; die App hat nur Zeilenrechte (siehe Entscheidungen). |
+| `DEMO_MODE=true` öffnete jede Instanz ohne Login; nur der Reset prüfte, dass ausschließlich Demo-Mandanten in der Datenbank sind. | Der Guard prüft dasselbe und antwortet sonst mit 503. |
+| Eingeloggte Seiten kamen mit Vercels Standard `public, max-age=0, must-revalidate`. | `private, no-store` auf jeder Antwort der App. |
+| Die Injection-Erkennung per Regex übersieht umformulierten oder versteckten Text im PDF. Eine automatische Buchung lässt sich festschreiben, ohne dass ein Mensch sie gesehen hat. | Als bekannte Grenze in `SECURITY.md`, mit Gegenmaßnahme (Stichprobe vor dem Festschreiben, noch nicht gebaut). |
+| Upload und Agenten liefen synchron im Request (Timeout), und die Grenze von 20 × 4 MB lag über Vercels 4,5 MB Request-Body. | Warteschlange mit Lease, Upload höchstens 4 MB zusammen. |
 
 Weitere Punkte stehen unter „Fachlich offen“. Bewusst nicht geändert: Abmelden widerruft eine kopierte Session nicht (siehe Grenzen).
 
