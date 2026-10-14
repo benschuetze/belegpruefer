@@ -3,13 +3,21 @@ import { createTestDb } from "../../tests/helpers/db";
 import { currentTenant, guard, isLoggedIn, safeRedirect, switchTenant } from "./auth.server";
 import type { Db } from "./db/client";
 import { tenants } from "./db/schema";
-import { DEMO_TENANTS } from "./db/seed";
+import { DEMO_TENANTS, markDemoDatabase } from "./db/seed";
+import { storeUpload } from "./documents.server";
 
 afterEach(() => vi.unstubAllEnvs());
 
+/** A database the public demo's build has claimed: the only kind demo mode may run on. */
+async function demoDb(): Promise<Db> {
+  const { db } = await createTestDb();
+  await markDemoDatabase(db);
+  return db;
+}
+
 async function status(request: Request, db?: Db): Promise<number | "ok"> {
   try {
-    await guard(request, db ?? (await createTestDb()).db);
+    await guard(request, db ?? (await demoDb()));
     return "ok";
   } catch (e) {
     if (e instanceof Response) return e.status;
@@ -30,10 +38,19 @@ describe("Zugang", () => {
     // A wrongly set DEMO_MODE on a real instance would otherwise publish every invoice without a login.
     vi.stubEnv("DEMO_MODE", "true");
     const { db } = await createTestDb({ as: "owner" });
+    await markDemoDatabase(db);
     await db.insert(tenants).values({ name: "Echte GmbH", beraterNr: 1, mandantenNr: 2 });
     expect(await status(new Request("http://x/belege"), db)).toBe(503);
     expect(await status(new Request("http://x/"), db)).toBe(503);
     expect(await status(new Request("http://x/mandant", { method: "POST" }), db)).toBe(503);
+  });
+
+  it("Demo-Modus auf einer privaten Instanz, deren Belege unter den festen Mandanten liegen: gesperrt", async () => {
+    // Every instance gets the two seed tenants; their ids alone do not make a database a demo.
+    vi.stubEnv("DEMO_MODE", "true");
+    const { db } = await createTestDb();
+    await storeUpload(db, DEMO_TENANTS[0].id, "echt.xml", Buffer.from("<Invoice/>"));
+    expect(await status(new Request("http://x/belege"), db)).toBe(503);
   });
 
   it("privat ohne Login: Weiterleitung beim Lesen, 401 beim Schreiben", async () => {

@@ -47,7 +47,7 @@ export default function Home() {
         ) : null}
       </section>
 
-      <QueueStatus waiting={numbers.waiting} />
+      <QueueStatus waiting={numbers.waiting} demo={demo} />
 
       <details className="ink-card max-w-xl" open>
         <summary className="cursor-pointer font-semibold">Wie gerechnet?</summary>

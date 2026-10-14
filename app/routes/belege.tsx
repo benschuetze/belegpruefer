@@ -21,6 +21,10 @@ const FILTER_LABELS: Record<Filter, string> = {
   festgeschrieben: "Festgeschrieben",
 };
 
+const TOO_BIG = "Zusammen mehr als 4 MB. Bitte in mehreren Schritten hochladen.";
+/** Boundaries and part headers of up to 20 files; the files themselves are checked exactly after parsing. */
+const MULTIPART_OVERHEAD_BYTES = 64 * 1024;
+
 export async function loader({ request }: Route.LoaderArgs) {
   const db = getDb();
   const tenant = await currentTenant(db, request);
@@ -38,6 +42,11 @@ export async function loader({ request }: Route.LoaderArgs) {
 export async function action({ request }: Route.ActionArgs) {
   const db = getDb();
   const tenant = await currentTenant(db, request);
+  // Refuse before reading: without a platform in front (self-hosted), formData() would buffer any size.
+  const declared = Number(request.headers.get("Content-Length") ?? 0);
+  if (declared > MAX_REQUEST_BYTES + MULTIPART_OVERHEAD_BYTES) {
+    return data({ results: [], error: TOO_BIG }, { status: 413 });
+  }
   const form = await request.formData();
   const files = form.getAll("files").filter((f): f is File => f instanceof File && f.name !== "");
   if (files.length === 0) return data({ results: [], error: "Keine Datei ausgewählt." }, { status: 400 });
@@ -45,10 +54,7 @@ export async function action({ request }: Route.ActionArgs) {
     return data({ results: [], error: `Höchstens ${MAX_FILES} Dateien auf einmal.` }, { status: 400 });
   }
   if (files.reduce((sum, f) => sum + f.size, 0) > MAX_REQUEST_BYTES) {
-    return data(
-      { results: [], error: "Zusammen mehr als 4 MB. Bitte in mehreren Schritten hochladen." },
-      { status: 413 },
-    );
+    return data({ results: [], error: TOO_BIG }, { status: 413 });
   }
   const results: UploadResult[] = [];
   for (const file of files) {
@@ -98,7 +104,7 @@ export default function Belege() {
         </section>
       ) : null}
 
-      <QueueStatus waiting={waiting} />
+      <QueueStatus waiting={waiting} demo={demo} />
 
       <nav aria-label="Filter" className="flex flex-wrap gap-2">
         {(Object.keys(FILTER_LABELS) as Filter[]).map((f) => (

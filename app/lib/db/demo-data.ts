@@ -9,7 +9,7 @@ import { buildCiiXml } from "~/lib/parser/build-cii";
 import { processDocument } from "~/lib/process.server";
 import type { Db } from "./client";
 import { documents, meta } from "./schema";
-import { DEMO_TENANTS, holdsOnlyDemoTenants } from "./seed";
+import { DEMO_TENANTS, holdsOnlyDemoTenants, markDemoDatabase } from "./seed";
 
 /*
  * Invented companies, invented invoices. Any resemblance to a real business is accidental; VAT ids follow the
@@ -291,8 +291,8 @@ export class NotADemoDatabase extends Error {}
 
 /**
  * Throws away the invented data of the public demo when its version is outdated. Refuses (throws, deletes nothing)
- * as soon as the database holds any tenant or document outside the invented demo tenants: a wrongly set DEMO_MODE
- * on a real instance must not be able to wipe a protocol. The protocol triggers are switched off only inside this
+ * on a database the demo has not claimed (see markDemoDatabase) and as soon as it holds any tenant or document
+ * outside the invented demo tenants: a wrongly set DEMO_MODE on a real instance must not be able to wipe a protocol. The protocol triggers are switched off only inside this
  * transaction. The version is written by `markDemoDataLoaded`, after loading succeeded.
  */
 export async function resetDemoDataIfOutdated(db: Db): Promise<boolean> {
@@ -300,6 +300,15 @@ export async function resetDemoDataIfOutdated(db: Db): Promise<boolean> {
     // Two deploys at once: the second waits here and then sees the work already done.
     await tx.execute(sql`select pg_advisory_xact_lock(hashtext('belegpruefer-demo-reset'))`);
     const [row] = await tx.select().from(meta).where(eq(meta.key, "demo_data_version"));
+    const [kind] = await tx.select().from(meta).where(eq(meta.key, "instance_kind"));
+    if (kind?.value !== "demo") {
+      // Claim the database for the demo only if it is empty, or already ran the demo before the marker existed.
+      // A private instance with real invoices (under the same seed tenants) is refused here, before anything else.
+      if (!row && (await tx.$count(documents)) > 0) {
+        throw new NotADemoDatabase("Datenbank ist keine Demo-Datenbank: Demo-Daten werden nicht zurückgesetzt.");
+      }
+      await markDemoDatabase(tx);
+    }
     if (row?.value === DEMO_DATA_VERSION) return false;
 
     if (!(await holdsOnlyDemoTenants(tx))) {

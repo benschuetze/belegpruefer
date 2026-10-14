@@ -6,7 +6,7 @@ import type { Beleg } from "../../app/lib/beleg";
 import { buildBeleg, type LineInput } from "../../app/lib/beleg-builder";
 import type { Db } from "../../app/lib/db/client";
 import * as schema from "../../app/lib/db/schema";
-import { seed } from "../../app/lib/db/seed";
+import { markDemoDatabase, seed } from "../../app/lib/db/seed";
 import { buildCiiXml } from "../../app/lib/parser/build-cii";
 
 export const E2E_PASSWORD = "e2e-test-passwort";
@@ -28,7 +28,10 @@ export async function resetDb(): Promise<void> {
       "truncate table reviews, decisions, bookings, exports, documents, suppliers, meta, login_attempts restart identity cascade",
     );
     await pool.query("set session_replication_role = default");
-    await seed(drizzle(pool, { schema }) as unknown as Db);
+    const db = drizzle(pool, { schema }) as unknown as Db;
+    await seed(db);
+    // The demo server on 5298 shares this throwaway database and only runs on one marked as demo.
+    await markDemoDatabase(db);
   } finally {
     await pool.end();
   }
@@ -51,6 +54,10 @@ export async function upload(page: Page, files: ReturnType<typeof invoiceFile>[]
   await expect(page.getByRole("status", { name: "Ergebnis des Uploads" })).toBeVisible();
   // The upload only stores; the page then works the queue off. Done when nothing waits any more.
   await expect(page.getByRole("status", { name: "Warteschlange" })).toBeHidden({ timeout: 30_000 });
+  await expect(page.getByRole("status", { name: "Ergebnis des Uploads" })).not.toContainText(
+    /wartet auf Prüfung|wird geprüft/,
+    { timeout: 30_000 },
+  );
 }
 
 export function collectConsoleErrors(page: Page): string[] {

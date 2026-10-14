@@ -42,7 +42,8 @@ Belegprüfer verarbeitet Rechnungen mehrerer Mandanten und lässt Sprachmodelle 
 - Login-Bremse je IP. Erst wird der Versuch eingetragen, dann gezählt, damit parallele Anfragen das Limit nicht umgehen.
 - XML mit DOCTYPE wird abgelehnt, also kein XXE und keine Entity-Expansion. Der Dateityp wird am Inhalt erkannt, nicht am Namen.
 - Originaldateien und Exporte werden nur als Download ausgeliefert, nie im Ursprung der App dargestellt.
-- Die öffentliche Demo ist schreibgeschützt. Nur der Mandanten-Umschalter darf schreiben.
+- Die öffentliche Demo ist schreibgeschützt. Nur der Mandanten-Umschalter darf schreiben. Der Demo-Modus läuft nur auf einer Datenbank, die der Demo-Build ausdrücklich als Demo markiert hat und die nur die erfundenen Mandanten enthält. Sonst antwortet jede Seite mit 503, und der Reset löscht nichts. Ein falsch gesetztes `DEMO_MODE=true` macht eine echte Instanz also nicht öffentlich (`app/lib/auth.test.ts`, `app/lib/db/demo-data.test.ts`).
+- Weiterleitungen nach Login und Aktionen gehen nur auf eigene Pfade, auch bei Punkt-Segmenten wie `/.//fremd.example` (`app/lib/auth.test.ts`, `tests/e2e/zugang.spec.ts`).
 - Actions sind auf Commit-SHA gepinnt, mit minimalen Rechten. CI läuft mit `pnpm audit` und einer OSV-Prüfung.
 - Die Claude-Review liest ihre Regeln vom Basis-Branch, nicht aus dem PR selbst.
 

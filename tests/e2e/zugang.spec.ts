@@ -11,7 +11,9 @@ test.describe("ohne Login", () => {
     expect(post.status()).toBe(401);
   });
 
-  test("Login mit präparierter Weiterleitung landet auf der eigenen Seite, nicht auf einer fremden", async ({ page }) => {
+  test("Login mit präparierter Weiterleitung landet auf der eigenen Seite, nicht auf einer fremden", async ({
+    page,
+  }) => {
     await page.goto("/login?next=/.//evil.example");
     await page.getByLabel("Passwort").fill(E2E_PASSWORD);
     await page.getByRole("button", { name: "Anmelden" }).click();

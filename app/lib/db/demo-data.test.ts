@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { createTestDb, dbRefusal } from "../../../tests/helpers/db";
 import { loadDemoData, markDemoDataLoaded, NotADemoDatabase, resetDemoDataIfOutdated } from "./demo-data";
 import { bookings, decisions, documents, reviews, tenants } from "./schema";
-import { DEMO_TENANTS } from "./seed";
+import { DEMO_TENANTS, markDemoDatabase } from "./seed";
 
 describe("Demo-Daten", () => {
   it("laden alle Belege, zeigen jeden Weg und sind beim zweiten Mal unverändert", async () => {
@@ -40,6 +40,8 @@ describe("Demo-Daten neu laden", () => {
   // The reset is the build's job and runs as owner; the runtime role cannot switch triggers off (roles.test.ts).
   it("lädt bei neuer Version alles neu, sonst nichts; alle Schutz-Trigger sind danach wieder scharf", async () => {
     const { db } = await createTestDb({ as: "owner" });
+    // The demo build claimed this database on its first, empty run.
+    await markDemoDatabase(db);
     await loadDemoData(db);
     expect(await resetDemoDataIfOutdated(db)).toBe(true);
     expect(await db.$count(documents)).toBe(0);
@@ -60,9 +62,20 @@ describe("Demo-Daten neu laden", () => {
 
   it("bricht ab und löscht nichts, sobald ein Mandant außerhalb der Demo existiert", async () => {
     const { db } = await createTestDb({ as: "owner" });
+    // The demo build claimed this database on its first, empty run.
+    await markDemoDatabase(db);
     await loadDemoData(db);
     const before = await db.$count(decisions);
     await db.insert(tenants).values({ name: "Echte GmbH", beraterNr: 1, mandantenNr: 2 });
+    await expect(resetDemoDataIfOutdated(db)).rejects.toThrow(NotADemoDatabase);
+    expect(await db.$count(decisions)).toBe(before);
+  });
+
+  it("private Instanz mit Belegen unter den festen Mandanten: kein Reset, nichts gelöscht", async () => {
+    // DEMO_MODE=true set by mistake on a real instance: the build's reset must refuse, not wipe the protocol.
+    const { db } = await createTestDb({ as: "owner" });
+    await loadDemoData(db);
+    const before = await db.$count(decisions);
     await expect(resetDemoDataIfOutdated(db)).rejects.toThrow(NotADemoDatabase);
     expect(await db.$count(decisions)).toBe(before);
   });

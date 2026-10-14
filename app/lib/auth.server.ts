@@ -3,7 +3,7 @@ import { asc } from "drizzle-orm";
 import { createCookieSessionStorage, redirect } from "react-router";
 import type { Db } from "~/lib/db/client";
 import { type Tenant, tenants } from "~/lib/db/schema";
-import { holdsOnlyDemoTenants } from "~/lib/db/seed";
+import { isDemoDatabase } from "~/lib/db/seed";
 
 export function isDemo(): boolean {
   return process.env.DEMO_MODE === "true";
@@ -148,13 +148,14 @@ const DEMO_CHECK_TTL_MS = 60_000;
 const demoChecks = new WeakMap<Db, { safe: boolean; at: number }>();
 
 /**
- * The public demo drops the login, so it must never run on a database with real clients. Checked once a minute per
- * database rather than per request; the demo cannot add tenants itself, a new one only arrives with a deploy.
+ * The public demo drops the login, so it must never run on a database with real clients: only on one the demo build
+ * marked, with nothing but invented tenants. Checked once a minute per database rather than per request; the demo
+ * cannot write documents or tenants itself.
  */
 async function demoModeSafe(db: Db): Promise<boolean> {
   const cached = demoChecks.get(db);
   if (cached && Date.now() - cached.at < DEMO_CHECK_TTL_MS) return cached.safe;
-  const safe = await holdsOnlyDemoTenants(db);
+  const safe = await isDemoDatabase(db);
   demoChecks.set(db, { safe, at: Date.now() });
   return safe;
 }

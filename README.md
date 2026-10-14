@@ -223,12 +223,12 @@ Danach hat `tax-reviewer` die Erwartungswerte des Eval-Sets und die Kontenlogik 
 | Kleinbetragsprivileg galt auch für Reverse Charge (§ 33 Satz 3 UStDV schließt das aus); Anschrift des Empfängers wurde nicht geprüft. | Beides im Validator. |
 | WJ-Beginn im DATEV-Kopf falsch bei abweichendem Wirtschaftsjahr. | Richtig berechnet, Stapel über zwei Wirtschaftsjahre abgelehnt. |
 
-Später kam eine Review von außen über den fertigen Stand. Fünf Befunde, alle mit Test behoben oder als Grenze dokumentiert:
+Später kam eine Review von außen über den fertigen Stand. Fünf Befunde, alle mit Test behoben oder als Grenze dokumentiert. Die Review-Agenten haben die Fixes danach noch einmal geprüft und dabei drei weitere Fehler gefunden: einen offenen Redirect über Punkt-Segmente in `?next=`, UPDATE-Rechte auf alle Spalten eines Belegs und einen fehlenden `await` auf dem Fehlerweg der Warteschlange.
 
 | Befund | Folge |
 |---|---|
 | Die Append-only-Trigger schützten nicht vor der App selbst: Sie lief als Eigentümer der Tabellen, und der Demo-Reset schaltet die Trigger per `ALTER TABLE` ab. | Zwei Rollen; die App hat nur Zeilenrechte (siehe Entscheidungen). |
-| `DEMO_MODE=true` öffnete jede Instanz ohne Login; nur der Reset prüfte, dass ausschließlich Demo-Mandanten in der Datenbank sind. | Der Guard prüft dasselbe und antwortet sonst mit 503. |
+| `DEMO_MODE=true` öffnete jede Instanz ohne Login; nur der Reset prüfte, dass ausschließlich Demo-Mandanten in der Datenbank sind. | Demo nur auf einer ausdrücklich markierten Demo-Datenbank, sonst 503 und kein Reset. Der erste Fix prüfte nur die Mandanten-IDs; der `security-reviewer` fand, dass jede Instanz diese IDs hat. |
 | Eingeloggte Seiten kamen mit Vercels Standard `public, max-age=0, must-revalidate`. | `private, no-store` auf jeder Antwort der App. |
 | Die Injection-Erkennung per Regex übersieht umformulierten oder versteckten Text im PDF. Eine automatische Buchung lässt sich festschreiben, ohne dass ein Mensch sie gesehen hat. | Als bekannte Grenze in `SECURITY.md`, mit Gegenmaßnahme (Stichprobe vor dem Festschreiben, noch nicht gebaut). |
 | Upload und Agenten liefen synchron im Request (Timeout), und die Grenze von 20 × 4 MB lag über Vercels 4,5 MB Request-Body. | Warteschlange mit Lease, Upload höchstens 4 MB zusammen. |

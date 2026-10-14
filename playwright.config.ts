@@ -72,7 +72,8 @@ export default defineConfig({
     },
     {
       command: "pnpm exec react-router-serve ./build/server/index.js",
-      url: `http://127.0.0.1:${DEMO_PORT}/`,
+      // A static file: pages answer 503 until a test has marked the shared database as a demo database.
+      url: `http://127.0.0.1:${DEMO_PORT}/favicon.svg`,
       env: { ...appEnv, PORT: String(DEMO_PORT), DEMO_MODE: "true" },
       reuseExistingServer: !CI,
       timeout: 60_000,
