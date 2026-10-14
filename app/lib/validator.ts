@@ -154,6 +154,14 @@ export function validateBeleg(beleg: Beleg, today: string): Finding[] {
   }
 
   findings.push(...instructionFindings(beleg));
+  if (beleg.lines.some((l) => VAGUE_SUPPLY.test(l.description))) {
+    findings.push(
+      hinweis(
+        LIEFERSCHEIN_CODE,
+        "Die Leistung ist nur über einen Lieferschein beschrieben (§ 14 Abs. 4 Nr. 5 UStG). Ohne den Lieferschein ist der Vorsteuerabzug unsicher: Lieferschein anfordern.",
+      ),
+    );
+  }
 
   if (beleg.lines.some(aboveGwgLimit)) {
     findings.push(hinweis("ueber_gwg_grenze", "Eine Position liegt über 800 € netto: möglicherweise Anlagevermögen."));
@@ -224,6 +232,14 @@ export function instructionFindings(beleg: Beleg): Finding[] {
     ? [fehler("anweisung_im_beleg", "Der Beleg enthält Text, der wie eine Anweisung an die Buchhaltung aussieht.")]
     : [];
 }
+
+/**
+ * "Diverses laut Lieferschein": the invoice names neither kind nor quantity, only a delivery note. That is enough
+ * only if the note is at hand. "Kopierpapier laut Lieferschein" names the goods and is fine.
+ */
+const VAGUE_SUPPLY =
+  /^\s*(diverses|div\.|verschiedenes|diverse artikel|waren|artikel|material(ien)?|positionen)[\s,]+(laut|lt\.?|gemäß|gem\.|siehe)\s+(lieferschein|ls)\b/i;
+export const LIEFERSCHEIN_CODE = "leistung_nur_lieferschein";
 
 export function hasErrors(findings: Finding[]): boolean {
   return findings.some((f) => f.severity === "fehler");

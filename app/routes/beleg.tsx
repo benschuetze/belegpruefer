@@ -5,9 +5,10 @@ import { ProtocolChain } from "~/components/protocol-chain";
 import type { BookingLine, KontiererOutput } from "~/lib/agents/kontierer";
 import type { PrueferOutput } from "~/lib/agents/pruefer";
 import { currentTenant, isDemo } from "~/lib/auth.server";
+import type { Beleg as BelegData } from "~/lib/beleg";
 import { formatDate, todayInGermany } from "~/lib/dates";
 import { getDb } from "~/lib/db/client";
-import type { Finding } from "~/lib/db/schema";
+import type { Booking, Finding, Review } from "~/lib/db/schema";
 import type { Outcome } from "~/lib/decide";
 import { confirmDocument, LedgerError, latestProposal, reverseAndRebook } from "~/lib/ledger.server";
 import { documentDetail } from "~/lib/queries.server";
@@ -215,6 +216,7 @@ export default function Beleg() {
                 {kontiererError ? `Kein Vorschlag: ${kontiererError}` : "Kein Vorschlag."}
               </p>
             )}
+            {beleg ? <GrossCheck beleg={beleg} /> : null}
             {proposal ? (
               <div className="space-y-1 text-[14px]">
                 <p className="pixel">Kontierer · Konfidenz {proposal.konfidenz.toFixed(2)}</p>
@@ -320,18 +322,75 @@ export default function Beleg() {
       <section aria-labelledby="protokoll-titel" className="space-y-3">
         <h2 id="protokoll-titel">Protokoll</h2>
         <ProtocolChain steps={detail.steps} />
-        {detail.reviews.length > 0 ? (
-          <ul className="ink-card space-y-1 text-[14px]">
-            {detail.reviews.map((r) => (
-              <li key={r.id}>
-                {new Date(r.createdAt).toLocaleString("de-DE", { timeZone: "Europe/Berlin" })}: {r.userLabel} hat{" "}
-                {r.result === "ok" ? "den Vorschlag bestätigt" : "die Kontierung geändert"}.
-              </li>
-            ))}
-          </ul>
-        ) : null}
+        <HumanSteps reviews={detail.reviews} bookings={detail.bookings} />
       </section>
     </div>
+  );
+}
+
+/**
+ * Bookings are built from the tax groups. When the invoice's printed total says something else, the difference
+ * must be visible where the amount is, not only as a validator line further down.
+ */
+function GrossCheck({ beleg }: { beleg: BelegData }) {
+  const computed = beleg.taxGroups.reduce((sum, g) => sum + g.netCents + g.taxCents, 0);
+  if (computed === beleg.totals.grossCents) return null;
+  return (
+    <p className="note-danger" data-testid="betrag-abweichung">
+      Brutto laut Beleg <Amount cents={beleg.totals.grossCents} />, aus Netto und Steuer gerechnet{" "}
+      <Amount cents={computed} />. Gebucht wird der gerechnete Betrag; die Differenz von{" "}
+      <Amount cents={beleg.totals.grossCents - computed} /> klärt ein Mensch mit dem Lieferanten.
+    </p>
+  );
+}
+
+type Choice = { konto: string; buSchluessel: string };
+const choices = (value: unknown): Choice[] =>
+  Array.isArray(value)
+    ? value.filter((v): v is Choice => typeof v?.konto === "string" && typeof v?.buSchluessel === "string")
+    : [];
+const describe = (list: Choice[]) =>
+  list.map((c) => `${accountLabel(c.konto)}, BU ${c.buSchluessel || "–"}`).join(" und ") || "–";
+const when = (d: Date | string) => new Date(d).toLocaleString("de-DE", { timeZone: "Europe/Berlin" });
+
+/**
+ * What people did with the document, oldest first: confirmations, corrections with before and after, and the
+ * moment it was festgeschrieben. For an accounting firm this is the entry that matters most.
+ */
+function HumanSteps({ reviews, bookings }: { reviews: Review[]; bookings: Booking[] }) {
+  // One entry per Festschreiben: a correction booked later gets locked with a later period.
+  const lockTimes = [...new Set(bookings.flatMap((b) => (b.lockedAt ? [new Date(b.lockedAt).getTime()] : [])))].sort(
+    (a, b) => a - b,
+  );
+  const steps = [
+    ...reviews.map((r) => {
+      const before = choices(r.before);
+      const after = choices(r.after);
+      const text =
+        r.result === "ok"
+          ? `${r.userLabel} hat den Vorschlag bestätigt: ${describe(after)}`
+          : `${r.userLabel} hat die Kontierung geändert: ${describe(before)} → ${describe(after)}`;
+      return { key: r.id, at: new Date(r.createdAt), text, kind: r.result === "ok" ? "Bestätigt" : "Korrigiert" };
+    }),
+    ...lockTimes.map((t) => ({
+      key: `fest-${t}`,
+      at: new Date(t),
+      text: "Zeitraum festgeschrieben: die Buchungen sind unveränderbar, Korrektur nur per Storno.",
+      kind: "Festgeschrieben",
+    })),
+  ].sort((a, b) => a.at.getTime() - b.at.getTime());
+  if (steps.length === 0) return null;
+  return (
+    <ol className="ink-card space-y-2" aria-label="Schritte von Menschen" data-testid="menschliche-schritte">
+      <li className="pixel">Von Menschen</li>
+      {steps.map((step) => (
+        <li key={step.key} className="grid gap-x-3 text-[14px] sm:grid-cols-[8rem_1fr_auto]">
+          <span className="font-semibold">{step.kind}</span>
+          <span className="min-w-0 break-words">{step.text}</span>
+          <span className="num text-[12px] text-muted-ink sm:text-right">{when(step.at)}</span>
+        </li>
+      ))}
+    </ol>
   );
 }
 

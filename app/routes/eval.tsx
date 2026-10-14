@@ -26,6 +26,7 @@ type Result = {
   variants: Variant[];
   threshold?: { normal: number; risk: number; reason: string };
   fazit?: string[];
+  erwartungGeaendert?: string;
   extraction?: { model: string; documents: number; allFieldsRight: number; costCentsPerDoc: number };
 };
 
@@ -133,6 +134,9 @@ export default function Eval() {
               erfundenen Rechnungen mit allen Feldern richtig gelesen,{" "}
               {data.extraction.costCentsPerDoc.toLocaleString("de-DE", { maximumFractionDigits: 2 })} ct je Beleg.
             </p>
+          ) : null}
+          {data.erwartungGeaendert ? (
+            <p className="max-w-2xl text-[14px] text-muted-ink">{data.erwartungGeaendert}</p>
           ) : null}
           {data.note ? <p className="note max-w-2xl">{data.note}</p> : null}
         </>

@@ -10,9 +10,9 @@ Eingangsrechnungen für mehrere Mandanten: hochladen, auslesen, nach SKR03 konti
 |---|---|
 | **Frage der Startseite** | Wie viele Belege sind fertig, wie viele brauchen dich? |
 | **Agenten** | Kontierer (`claude-haiku-5-5`), Prüfer auf anderem Modell (`claude-sonnet-5-5`), Recherche mit zwei lesenden Werkzeugen, Extraktor für PDF. Entschieden wird in Code, nicht vom Modell. |
-| **Ergebnis des Evals** | 165 erfundene Belege, vier Aufstellungen gegen das echte Modell: **0 % falsch trotz automatisch**, 98,8 % Konto richtig, 71,5 % automatisch gebucht, 0,38 ct je Beleg. Der Prüfer verhindert auf diesem Set nichts zusätzlich – das steht so drin. |
+| **Ergebnis des Evals** | 165 erfundene Belege, vier Aufstellungen gegen das echte Modell: **0 % falsch trotz automatisch** in jeder Aufstellung, Konto richtig 98,8–100 %, gut 70 % automatisch gebucht. Der Kontierer allein (0,016 ct je Beleg) ist hier so gut wie das ganze Team (0,38 ct) – das steht so drin, samt der Korrektur eines früheren Fazits. |
 | **Sicherheit** | Mandant nur aus der Session, Fremdschlüssel je Mandant, Protokoll und Festschreibung per Datenbank-Trigger unveränderbar, zwei Linien gegen Prompt Injection. Details in [SECURITY.md](SECURITY.md). |
-| **Tests** | 230 Unit- und Datenbanktests (Vitest mit PGlite), 15 Nutzerabläufe in Chromium und WebKit (Playwright mit axe), CI auf GitHub Actions. |
+| **Tests** | 241 Unit- und Datenbanktests (Vitest mit PGlite), 16 Nutzerabläufe in Chromium und WebKit (Playwright mit axe), CI auf GitHub Actions. |
 | **Stack** | React Router 7, TypeScript strict, Drizzle, Neon Postgres (Frankfurt), Vercel, Vercel AI SDK mit Claude, Zod, Tailwind, Biome. |
 | **Gebaut** | mit Claude Code und drei Review-Agenten; deren echte Befunde stehen unten unter [Arbeitsweise mit Agenten](#arbeitsweise-mit-agenten). |
 
@@ -36,10 +36,10 @@ Oben rechts wechselt der Umschalter zur **Rösterei Lindgrün UG**: anderer Mand
 
 - **Mehrere Mandanten, strikt getrennt.** Der Mandant kommt nur aus der signierten Session, nie aus URL oder Formular. Jede Tabelle hat `tenant_id`, jeder Index beginnt damit, jede Funktion in `app/lib` nimmt `tenantId` als ersten Parameter. Ein fremder Beleg sieht aus wie ein nicht vorhandener (404).
 - **Upload** von XRechnung (CII) und ZUGFeRD als XML, deterministisch geparst; PDF über ein Vision-Modell mit festem Schema und Konfidenz je Feld. Jede Datei bekommt eine Antwort: neu, Duplikat (SHA-256 je Mandant) oder mit Grund abgelehnt.
-- **Validator in Code:** Summen auf den Cent (Positionen → Steuergruppen → Brutto), Pflichtangaben nach § 14 UStG bzw. § 33 UStDV für Kleinbetragsrechnungen, USt-IdNr.-Format je EU-Land, Datum, Reverse-Charge-Hinweis, GWG-Grenze, Bewirtungsangaben.
+- **Validator in Code:** Summen auf den Cent (Positionen → Steuergruppen → Brutto, die Abweichung steht direkt am Betrag), Pflichtangaben nach § 14 UStG bzw. § 33 UStDV für Kleinbetragsrechnungen, Leistungsbeschreibung nur „laut Lieferschein“, USt-IdNr.-Format je EU-Land, Datum, Reverse-Charge-Hinweis, GWG-Grenze, Bewirtungsangaben.
 - **Agenten-Team** (siehe unten): Recherche bei unbekanntem Lieferanten, Kontierer, Prüfer. Entschieden wird in Code.
 - **Prüf-Oberfläche:** Beleg links, Vorschlag mit Begründung und Einwand des Prüfers rechts, Validator-Befunde, Gründe für die Vorlage. „Passt, buchen“ oder „Konto ändern“.
-- **Protokoll** jeder Entscheidung, nur anhängend: Modell, Prompt-Version, Eingabe, Ausgabe, Konfidenz, Tokens, Kosten, Dauer. Die Datenbank lehnt UPDATE und DELETE per Trigger ab.
+- **Protokoll** jeder Entscheidung, nur anhängend: Modell, Prompt-Version, Eingabe, Ausgabe, Konfidenz, Tokens, Kosten, Dauer. Darunter die Schritte von Menschen: wer bestätigt oder korrigiert hat, vorher und nachher (z. B. „4900 → 4930“), und wann festgeschrieben wurde. Die Datenbank lehnt UPDATE und DELETE per Trigger ab.
 - **Festschreiben** eines Zeitraums (verweigert, solange dort etwas offen ist). Danach ist eine Buchung unveränderbar, auch für die Datenbank; Korrektur nur per Storno plus neuer Buchung.
 - **DATEV-Export** als Buchungsstapel (EXTF 700, Kategorie 21, Version 13), Semikolon, Dezimalkomma, Windows-1252.
 - **Eval mit Ablation:** vier Aufstellungen auf 165 erfundenen Belegen, Kennzahl „falsch trotz automatisch“, gemessen gegen das echte Modell.
@@ -115,6 +115,7 @@ Regeln für alle Agenten:
 - Prüfer mit Einwand oder ohne Antwort → `pruefen`
 - Konfidenz unter der Schwelle: 0,85, für Risikokonten (Bewirtung, GWG, Reverse Charge) 0,9 → `pruefen`
 - Leistung aus einem Drittland ohne deutsche Steuer → `pruefen`
+- Leistung nur „laut Lieferschein“ beschrieben → `pruefen`, Lieferschein anfordern
 - sonst `automatisch`
 
 Die Schwelle 0,85 kommt aus dem Eval (Startwert war 0,8), siehe unten.
@@ -127,16 +128,16 @@ Die Tabelle zeigt die Entscheidung mit der gewählten Schwelle (0,85 normal, 0,9
 
 | Aufstellung | Konto richtig | BU richtig | automatisch | **falsch trotz automatisch** | Kosten/Beleg | Zeit/Beleg |
 |---|---:|---:|---:|---:|---:|---:|
-| 1 Kontierer allein | 97,6 % | 100 % | 72,7 % | **0 %** (0) | 0,016 ct | 1,7 s |
-| 2 + Prüfer | 97,6 % | 100 % | 72,1 % | **0 %** (0) | 0,362 ct | 4,2 s |
-| 3 + Prüfer + Recherche | 97,6 % | 100 % | 69,7 % | **0 %** (0) | 0,374 ct | 5,8 s |
+| 1 Kontierer allein | 100 % | 100 % | 72,7 % | **0 %** (0) | 0,016 ct | 1,7 s |
+| 2 + Prüfer | 100 % | 100 % | 72,1 % | **0 %** (0) | 0,362 ct | 4,2 s |
+| 3 + Prüfer + Recherche | 98,8 % | 100 % | 69,7 % | **0 %** (0) | 0,374 ct | 5,8 s |
 | 4 + Prüfer + Recherche + Beispiele | 98,8 % | 100 % | 71,5 % | **0 %** (0) | 0,378 ct | 5,8 s |
 
-Kalibrierung (Aufstellung 4, Anteil richtig kontierter Belege je Konfidenzbereich): 0–0,6: 13 Belege, 100 % · 0,6–0,8: 4, 75 % · 0,8–0,9: 12, 92 % · 0,9–1,0: 136, 100 %. Extraktion aus PDF (`claude-sonnet-5-5`, 20 erfundene Rechnungen in drei Layouts): alle neun Felder bei allen 20 richtig, 0,93 ct je Beleg.
+Kalibrierung (Aufstellung 4, Anteil richtig kontierter Belege je Konfidenzbereich, halboffene Intervalle): [0; 0,6): 13 Belege, 100 % · [0,6; 0,8): 4, 75 % · [0,8; 0,9): 12, 92 % · [0,9; 1]: 136, 100 %. Ein Beleg mit genau 0,80 gehört zu [0,8; 0,9). Extraktion aus PDF (`claude-sonnet-5-5`, 20 erfundene Rechnungen in drei Layouts): alle neun Felder bei allen 20 richtig, 0,93 ct je Beleg.
 
-**Lohnt sich der Prüfer?** Auf diesem Set nicht: Er hat nur bei vier Belegen widersprochen, die der Kontierer ohnehin unsicher gemeldet hatte, und keine einzige falsche automatische Buchung zusätzlich verhindert, kostet aber das 22-Fache (absolut 0,35 ct je Beleg). Er bleibt drin, weil die Belege hier sauber erfunden sind und echte Rechnungen unordentlicher sind; der nächste Schritt wäre, ihn nur unterhalb von 0,95 Konfidenz und bei Risikokonten zu fragen. **Lohnt sich die Recherche?** Nicht messbar: gleiche Kontogenauigkeit, etwas weniger Automatik, 1,6 s mehr je Beleg. Was hilft, sind **Beispiele aus bestätigten Buchungen** desselben Lieferanten (97,6 % → 98,8 % Konto richtig).
+**Lohnt sich der Prüfer?** Auf diesem Set nicht: Er hat nur bei vier Belegen widersprochen, die der Kontierer ohnehin unsicher gemeldet hatte, und keine einzige falsche automatische Buchung zusätzlich verhindert, kostet aber das 22-Fache (absolut 0,35 ct je Beleg). Er bleibt drin, weil die Belege hier sauber erfunden sind und echte Rechnungen unordentlicher sind; der nächste Schritt wäre, ihn nur unterhalb von 0,95 Konfidenz und bei Risikokonten zu fragen. **Lohnen sich Recherche und Beispiele?** Auf diesem Set nicht: Der Kontierer allein kontiert alle 161 bestimmbaren Belege richtig, mit Recherche und Beispielen sind es zwei weniger, bei 1,6 s mehr je Beleg. Ein früherer Stand dieses Abschnitts sah einen Gewinn durch Beispiele (97,6 % → 98,8 %). Der kam nur aus vier Belegen „Diverses laut Lieferschein“: Dort erwartete das Set 4900, und frühere Fälle mit genau dieser Erwartung dienten als Beispiele – das Modell hat die Erwartung gelernt, nicht die Buchhaltung. Fachlich ist so ein Beleg ohne Lieferschein nicht kontierbar; das Set erwartet dort jetzt nur noch „prüfen, Lieferschein anfordern“ (neu bewertet aus den gespeicherten Antworten, ohne neuen Modelllauf). Ehrlicher Schluss: Auf sauber erfundenen Belegen reicht ein günstiges Modell mit harten Regeln in Code; ob Prüfer und Beispiele bei echten, unordentlichen Rechnungen etwas bringen, müsste ein Set aus echten Belegen zeigen.
 
-**Schwelle.** Mit dem Startwert 0,8 ging in Aufstellung 3 ein Beleg falsch durch: Visitenkarten auf Bürobedarf statt Werbung, Konfidenz 0,80 (fachlich vertretbar, aber nicht der Erwartungswert). Über alle vier Aufstellungen lag jede falsche Kontierung bei 0,80 oder darunter, im Bereich 0,9–1,0 war jede richtig. Deshalb 0,85: gut ein Prozentpunkt weniger Automatik, dafür Abstand zur Zone, in der die Fehler liegen. Das Schwellen-Raster steht in `evals/ergebnis.json` (`sweep`).
+**Schwelle.** Mit dem Startwert 0,8 ging in Aufstellung 3 ein Beleg falsch durch: Visitenkarten auf Bürobedarf statt Werbung, Konfidenz 0,80 (fachlich vertretbar, aber nicht der Erwartungswert). Über alle vier Aufstellungen lag jede falsche Kontierung bei 0,80 oder darunter, im Bereich [0,9; 1] war jede richtig. Deshalb 0,85: gut ein Prozentpunkt weniger Automatik, dafür Abstand zur Zone, in der die Fehler liegen. Das Schwellen-Raster steht in `evals/ergebnis.json` (`sweep`).
 
 Grenzen der Messung: ein Lauf je Aufstellung, keine Wiederholungen (Unterschiede von ein, zwei Belegen sind Rauschen); die Belege sind aus Vorlagen erzeugt und damit leichter als echte; die Erwartungswerte sind regelbasiert festgelegt und vom `tax-reviewer` fachlich geprüft. Eine Stichprobe von 30 Fällen zur Prüfung von Hand liegt in `evals/stichprobe.md` und ist **noch nicht abgehakt**.
 

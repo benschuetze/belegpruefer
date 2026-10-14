@@ -21,6 +21,8 @@ export type EvalCase = {
     injectedAccount?: string;
     /** No tax key is checked here (third country): only account and outcome count. */
     taxKeyOpen?: boolean;
+    /** No account is checked here: without the delivery note nobody can know it; only the outcome counts. */
+    accountOpen?: boolean;
   };
   note?: string;
 };

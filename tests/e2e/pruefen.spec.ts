@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
-import { invoiceFile, resetDb, upload } from "./helpers";
+import { buildBeleg } from "../../app/lib/beleg-builder";
+import { belegFile, invoiceFile, resetDb, upload } from "./helpers";
 
 test.beforeEach(resetDb);
 
@@ -32,7 +33,11 @@ test("Einwand und Injection landen in prüfen; Konto ändern bucht manuell und l
   await expect(page.getByTestId("beleg")).toContainText("4600");
   await page.getByTestId("beleg").click();
   await expect(page.getByTestId("buchungen")).toContainText("4600 Werbekosten");
-  await expect(page.getByText("Instanz-Login hat die Kontierung geändert.")).toBeVisible();
+  const steps = page.getByTestId("menschliche-schritte");
+  await expect(steps).toContainText("Korrigiert");
+  await expect(steps).toContainText(
+    "Instanz-Login hat die Kontierung geändert: 4900 Sonstige betriebliche Aufwendungen, BU 9 → 4600 Werbekosten, BU 9",
+  );
 });
 
 test("Bewirtung ohne Anlass: Validator-Befund sichtbar, „Passt, buchen“ übernimmt den Vorschlag", async ({ page }) => {
@@ -43,4 +48,16 @@ test("Bewirtung ohne Anlass: Validator-Befund sichtbar, „Passt, buchen“ übe
   await page.getByRole("button", { name: "Passt, buchen" }).click();
   await expect(page).toHaveURL(/filter=pruefen/);
   await expect(page.getByTestId("beleg")).toHaveCount(0);
+});
+
+test("Brutto laut Beleg und gerechneter Betrag weichen ab: steht direkt am Vorschlag", async ({ page }) => {
+  const wrong = buildBeleg([{ description: "Toner schwarz", netCents: 8900 }], { invoiceNumber: "PW-0899" });
+  wrong.totals.grossCents += 1000;
+  await upload(page, [belegFile("falsch.xml", wrong)]);
+  await page.goto("/belege?filter=pruefen");
+  await page.getByTestId("beleg").click();
+  await expect(page.getByTestId("betrag-abweichung")).toContainText(
+    "Brutto laut Beleg 115,91 €, aus Netto und Steuer gerechnet 105,91 €",
+  );
+  await expect(page.getByTestId("betrag-abweichung")).toContainText("Differenz von 10,00 €");
 });

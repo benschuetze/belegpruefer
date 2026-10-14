@@ -3,6 +3,7 @@ import { makeBeleg, makeReverseCharge } from "../../tests/helpers/belege";
 import type { KontiererOutput } from "./agents/kontierer";
 import type { Finding } from "./db/schema";
 import { decide } from "./decide";
+import { validateBeleg } from "./validator";
 
 const paper = makeBeleg();
 const proposal = (konto: string, buSchluessel: string, konfidenz = 0.95, satz = 19): KontiererOutput =>
@@ -131,5 +132,15 @@ describe("Drittland", () => {
     const result = decide({ beleg: us, findings: [], kontierer: proposal("4964", "", 0.99, 0) });
     expect(result.outcome).toBe("pruefen");
     expect(result.reasons.join()).toMatch(/Drittland/);
+  });
+});
+
+describe("Lieferschein", () => {
+  it("Leistung nur über Lieferschein: prüfen, auch wenn alles andere sicher ist", () => {
+    const vague = makeBeleg([{ description: "Diverses laut Lieferschein 5871", netCents: 4130 }]);
+    const findings = validateBeleg(vague, "2026-10-12");
+    const result = decide({ beleg: vague, findings, kontierer: proposal("4930", "9", 0.99), pruefer: agree });
+    expect(result.outcome).toBe("pruefen");
+    expect(result.reasons.join()).toMatch(/Lieferschein anfordern/);
   });
 });

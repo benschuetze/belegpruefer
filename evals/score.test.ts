@@ -58,6 +58,17 @@ describe("Bewertung", () => {
     expect(judge(c, run("4900", 0.99)).wrongButAutomatic).toBe(true);
   });
 
+  it("Konto offen (Lieferschein): jedes Konto zählt, solange geprüft wird; automatisch bleibt ein Fehler", () => {
+    const open = evalCase({ outcome: "pruefen", accountOpen: true, lines: [{ satz: 19, konto: "4900", bu: "9" }] });
+    expect(judge(open, run("4930", 0.5))).toMatchObject({
+      accountOk: true,
+      outcome: "pruefen",
+      wrongButAutomatic: false,
+    });
+    expect(judge(open, run("4930", 0.95)).wrongButAutomatic).toBe(true);
+    expect(judge(open, { ...run("4930", 0.5), kontierer: null }).accountOk).toBe(false);
+  });
+
   it("Zusammenfassung: Anteile, Kalibrierung, Kosten in Cent", () => {
     const s = summarize([judge(evalCase(), run("4600", 0.95)), judge(evalCase(), run("4930", 0.5))]);
     expect(s).toMatchObject({
@@ -68,8 +79,8 @@ describe("Bewertung", () => {
       costCentsPerDoc: 1,
       secondsPerDoc: 2,
     });
-    expect(s.calibration.find((b) => b.range === "0,9–1,0")).toEqual({ range: "0,9–1,0", n: 1, accuracy: 1 });
-    expect(s.calibration.find((b) => b.range === "0–0,6")).toEqual({ range: "0–0,6", n: 1, accuracy: 0 });
+    expect(s.calibration.find((b) => b.range === "[0,9; 1]")).toEqual({ range: "[0,9; 1]", n: 1, accuracy: 1 });
+    expect(s.calibration.find((b) => b.range === "[0; 0,6)")).toEqual({ range: "[0; 0,6)", n: 1, accuracy: 0 });
   });
 
   it("Schwellen-Raster: höhere Schwelle, weniger automatisch", () => {

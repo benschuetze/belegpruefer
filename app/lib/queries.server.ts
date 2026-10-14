@@ -54,7 +54,8 @@ export async function listDocuments(db: Db, tenantId: string, filter: Filter) {
     })
     .from(documents)
     .where(and(eq(documents.tenantId, tenantId), statuses ? inArray(documents.status, [...statuses]) : undefined))
-    .orderBy(desc(documents.createdAt))
+    // Newest invoice first by the date printed on it; upload time only breaks ties and orders unreadable files.
+    .orderBy(sql`${documents.extracted}->>'issueDate' desc nulls last`, desc(documents.createdAt))
     .limit(200);
   const ids = docs.map((d) => d.id);
   const accounts =

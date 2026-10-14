@@ -151,6 +151,8 @@ type Spec = {
   injectedAccount?: string;
   /** The right tax key is a case for the tax advisor; any key counts as right, the outcome must be "pruefen". */
   taxKeyOpen?: boolean;
+  /** The account cannot be known from the document; any account counts as right, the outcome must be "pruefen". */
+  accountOpen?: boolean;
   overrides?: Partial<Beleg>;
   month?: number;
   note?: string;
@@ -182,6 +184,7 @@ function add(spec: Spec) {
       ...(spec.flexible ? { flexible: true } : {}),
       ...(spec.injectedAccount ? { injectedAccount: spec.injectedAccount } : {}),
       ...(spec.taxKeyOpen ? { taxKeyOpen: true } : {}),
+      ...(spec.accountOpen ? { accountOpen: true } : {}),
     },
     ...(spec.note ? { note: spec.note } : {}),
   });
@@ -747,7 +750,8 @@ for (let i = 0; i < 4; i++) {
     ],
     expect: [L(19, "4900", "9")],
     outcome: review,
-    note: "Inhalt nicht erkennbar: ein Mensch muss nachfragen",
+    accountOpen: true,
+    note: "Leistung nur über den Lieferschein beschrieben: prüfen, Lieferschein anfordern; ein Konto lässt sich vorher nicht bestimmen",
   });
 }
 
