@@ -3,7 +3,7 @@
 // way forward, and handles what a glob cannot express (committed vs. new migration, comments vs. code in skr03.ts).
 // Changes made around it through Bash are caught at commit time by guard-commit-size.mjs.
 import { readFileSync } from "node:fs";
-import { relative, resolve } from "node:path";
+import { resolve } from "node:path";
 import {
   changedNumbers,
   decide,
@@ -56,7 +56,7 @@ if (/^\.env(\..*)?$/.test(name) && name !== ".env.example") {
     `${rel} erzeugt drizzle-kit. Schema in app/lib/db/schema.ts ändern und pnpm db:generate (Skill db-change).`,
   );
 } else if (rel.startsWith("drizzle/")) {
-  const committed = inHead(root, relative(root, filePath).split("\\").join("/"));
+  const committed = inHead(root, rel);
   if (committed === true) {
     decide(
       "deny",
@@ -106,9 +106,11 @@ function inHead(cwd, path) {
   } catch (error) {
     return error?.code === "ENOENT" ? undefined : false;
   }
+  // Compared in lower case: on macOS and Windows "Drizzle/0000.sql" is the committed file, and on Linux refusing a
+  // look-alike new file costs a question, not data.
   try {
-    git(cwd, ["cat-file", "-e", `HEAD:${path}`]);
-    return true;
+    const committed = git(cwd, ["ls-tree", "-r", "--name-only", "-z", "HEAD"]);
+    return committed.split("\0").some((p) => p.toLowerCase() === path);
   } catch (error) {
     return error?.code === "ENOENT" ? undefined : false;
   }

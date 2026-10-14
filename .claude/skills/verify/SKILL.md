@@ -41,6 +41,7 @@ description: Use for every code change before calling it done - writing the righ
 - Hook geändert: `pnpm exec vitest run tests/hooks`. Jeder Test braucht einen Fall, der ohne den Fix rot wäre.
 - Prüfpunkte für Hooks (aus der Review der ersten Fassung):
   - Pfade normalisieren, bevor eine Regel greift: gegen `cwd` auflösen, Symlinks auflösen, klein schreiben (macOS und Windows unterscheiden Groß und Klein nicht), `/` statt `\`.
+  - Lokal ist macOS (Groß/Klein egal), CI ist Linux (Groß/Klein zählt): Ein Vergleich darf nicht davon abhängen, dass `realpath` die Schreibweise angleicht. Beide Seiten klein schreiben.
   - Die Leitplanken schützen sich selbst (`.claude/settings*.json`, `.claude/hooks/`), sonst schaltet ein Edit sie ab.
   - git aus einem Hook nur im eigenen Repo oder dessen Worktrees und mit `-c core.fsmonitor=false`: Hooks laufen ohne Sandbox, und ein fremdes Repo kann über seine Konfiguration Befehle starten.
   - Was nur der Edit-Hook prüft, umgeht `sed -i`; deshalb prüft der Commit-Hook dieselben Dateien noch einmal am gestagten Stand.
