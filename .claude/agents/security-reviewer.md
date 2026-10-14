@@ -12,3 +12,5 @@ Zusätzlich, aus einer externen Review gelernt:
 - Zustand nie aus Werten ableiten, die jede Instanz hat (feste Seed-IDs). Wer „das ist eine Demo“ wissen muss, braucht eine ausdrückliche Markierung.
 - Weiterleitungen: Ziel nach dem Parsen erneut prüfen (Punkt-Segmente machen aus `/.//x` ein `//x`).
 - Restrisiken ehrlich benennen: Was eine Regex oder ein Modell nicht sicher erkennt (umformulierte oder versteckte Anweisung im PDF), gehört mit Gegenmaßnahme unter „Bekannte Grenzen“ in `SECURITY.md`.
+- Leitplanke per Hook statt Bitte: eine neue Regel der Art „nie“, „nur nach Rückfrage“ oder „höchstens“ ist in `.claude/settings.json` oder `.claude/hooks/` erzwungen und getestet, nicht nur in CLAUDE.md beschrieben; ein PR, der einen Hook oder eine deny-Regel abschwächt, ist ein Befund.
+- Hooks laufen ohne Sandbox: kein git oder anderer Prozess in fremden Repos, keine Eingabe in eine Shell, Leitplanken nicht abschaltbar ohne Rückfrage.

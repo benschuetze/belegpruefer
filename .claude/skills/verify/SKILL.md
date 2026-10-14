@@ -37,6 +37,23 @@ description: Use for every code change before calling it done - writing the righ
 - **Injection:** Anweisung im Belegtext führt nie zu `automatisch` mit dem eingeschleusten Konto.
 - **DATEV:** Kopfsatz, Spalten, Komma, TTMM, Längen, Windows-1252.
 
+## Leitplanken
+
+- Regel, die nicht verletzt werden darf (Pfad, Commit-Größe, Geheimnis): als Hook oder Berechtigung in `.claude/settings.json` erzwingen, nicht nur in CLAUDE.md bitten. Hook mit Test in `tests/hooks/`: erlaubt, blockiert, kaputte Eingabe wirft nicht.
+- Hook geändert: `pnpm exec vitest run tests/hooks`. Jeder Test braucht einen Fall, der ohne den Fix rot wäre.
+- Prüfpunkte für Hooks (aus der Review der ersten Fassung):
+  - Pfade normalisieren, bevor eine Regel greift: gegen `cwd` auflösen, Symlinks auflösen, klein schreiben (macOS und Windows unterscheiden Groß und Klein nicht), `/` statt `\`.
+  - Lokal ist macOS (Groß/Klein egal), CI ist Linux (Groß/Klein zählt): Ein Vergleich darf nicht davon abhängen, dass `realpath` die Schreibweise angleicht. Beide Seiten klein schreiben.
+  - Die Leitplanken schützen sich selbst (`.claude/settings*.json`, `.claude/hooks/`), sonst schaltet ein Edit sie ab.
+  - git aus einem Hook nur im eigenen Repo oder dessen Worktrees und mit `-c core.fsmonitor=false`: Hooks laufen ohne Sandbox, und ein fremdes Repo kann über seine Konfiguration Befehle starten.
+  - Was nur der Edit-Hook prüft, umgeht `sed -i`; deshalb prüft der Commit-Hook dieselben Dateien noch einmal am gestagten Stand.
+  - Shell-Befehle mit Anführungszeichen, `$( )`, `cd`, `git -C`, `sh -c`, Unterschalen, Wrappern (`env`, `command`, `if … then`) zerlegen. Umleitungen (`2>&1`, `>/dev/null`) und Heredocs sind keine Argumente: sonst werden sie zu Pfadangaben, und der Commit wird gar nicht gemessen. Was sich nicht bestimmen lässt (Pfad aus Variable), wird zur Rückfrage, nicht still erlaubt.
+  - Pfade in `git commit <pfad>` gelten relativ zum Verzeichnis des Commits, nicht zur Wurzel.
+  - Ein git-Befehl vor dem Commit im selben Aufruf, der Index oder Arbeitsbaum ändert (`add`, `reset --soft`, `stash pop`, `checkout -- pfad`), macht jede Messung vorher wertlos: ablehnen.
+  - Testbefehle aus dem Alltag gehören in die Tests (`2>&1 | tail`, Heredoc-Nachricht, `--amend --no-edit`): falsche Sperren sind genauso ein Fehler wie Lücken.
+  - Inhaltsprüfungen auf die ganze Datei nach der Änderung anwenden, nie nur auf den Ausschnitt eines Edits.
+- Blockiert ein Hook die eigene Arbeit: Meldung lesen und dem genannten Weg folgen, nie per Bash umgehen.
+
 ## Hinweise
 
 - Ports der E2E-Läufe: 5299 (App), 5298 (Demo), 5334 (PGlite). Andere Projekte auf derselben Maschine nutzen 5199/5198/5434; deren Prozesse nicht beenden.

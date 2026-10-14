@@ -46,6 +46,7 @@ Belegprüfer verarbeitet Rechnungen mehrerer Mandanten und lässt Sprachmodelle 
 - Weiterleitungen nach Login und Aktionen gehen nur auf eigene Pfade, auch bei Punkt-Segmenten wie `/.//fremd.example` (`app/lib/auth.test.ts`, `tests/e2e/zugang.spec.ts`).
 - Actions sind auf Commit-SHA gepinnt, mit minimalen Rechten. CI läuft mit `pnpm audit` und einer OSV-Prüfung.
 - Die Claude-Review liest ihre Regeln vom Basis-Branch, nicht aus dem PR selbst.
+- Claude Code im Repo: deny-Regeln und Hooks in `.claude/settings.json` sperren die üblichen `.env`-Dateien (Lesen und Schreiben), generierte Migrationen und die Eval-Erwartungswerte. Bei Workflows, `skr03.ts`, den Eval-Vorlagen und den Leitplanken selbst fragen sie nach. Commits über 400 Zeilen und Commits, die eine committete Migration ändern, lehnen sie ab. Tests: `tests/hooks/`.
 
 ## Bekannte Grenzen
 
@@ -55,6 +56,7 @@ Belegprüfer verarbeitet Rechnungen mehrerer Mandanten und lässt Sprachmodelle 
 - Sitzungen sind zustandslos. Eine kopierte Session bleibt bis zu sieben Tage gültig, widerrufen lassen sich alle nur über ein neues Passwort.
 - Row Level Security in Postgres ist noch nicht umgesetzt. Die Trennung liegt in der Anwendung und in den Fremdschlüsseln.
 - Ein Passwort pro Instanz, keine Benutzerverwaltung.
+- Die Claude-Code-Leitplanken gelten für Claudes Werkzeuge, nicht für jeden Prozess. Ein Skript, das Dateien selbst öffnet (`node -e`, `vercel env pull`), liest und schreibt an ihnen vorbei; deshalb liegen lokal keine Eigentümer- oder Produktionszugangsdaten in `.env`. Den Commit-Hook umgehen ungewöhnliche Schreibweisen und Befehle, die ohne `commit` committen (`merge`, `cherry-pick`, `rebase`). Im Modus `bypassPermissions` sind Rückfragen nicht zugesichert. Ein Hook, der fehlt oder abstürzt, blockiert nicht (Claude Code wertet das als nicht blockierenden Fehler); ein Bash-Befehl, der ein Hook-Skript löscht oder `disableAllHooks` setzt, wirkt also, bevor der Commit-Hook ihn sieht. Die harte Grenze dahinter sind PR-Pflicht, CI und Review auf GitHub.
 
 ## Lücken melden
 

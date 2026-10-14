@@ -13,3 +13,6 @@ test-results/
 playwright/.auth/
 # Lokale Notizen
 STAND.md
+
+# Private Architekturmappe, nie pushen
+/.architektur/
