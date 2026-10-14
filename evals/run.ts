@@ -197,7 +197,10 @@ function writeResult(runsByVariant: Partial<Record<VariantId, CaseRun[]>>, measu
   // Keep what other runners wrote (the extraction eval), replace only the ablation part.
   const file = new URL("./ergebnis.json", import.meta.url);
   const previous = JSON.parse(readFileSync(file, "utf8")) as Record<string, unknown>;
-  writeFileSync(file, `${JSON.stringify({ ...previous, ...result }, null, 1)}\n`);
+  // Re-scoring stored answers is not a new measurement: the date stays the one of the model run.
+  const merged =
+    flag("--nur-auswerten") && previous.measuredAt ? { ...result, measuredAt: previous.measuredAt } : result;
+  writeFileSync(file, `${JSON.stringify({ ...previous, ...merged }, null, 1)}\n`);
   return result;
 }
 

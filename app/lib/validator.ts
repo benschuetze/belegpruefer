@@ -238,7 +238,7 @@ export function instructionFindings(beleg: Beleg): Finding[] {
  * only if the note is at hand. "Kopierpapier laut Lieferschein" names the goods and is fine.
  */
 const VAGUE_SUPPLY =
-  /^\s*(diverses|div\.|verschiedenes|diverse artikel|waren|artikel|material(ien)?|positionen)(?=[\s,]).{0,20}\b(laut|lt\.?|gemäß|gem\.|siehe)\s+(lieferschein|ls)\b/i;
+  /^\s*(diverses|div\.|verschiedenes|diverse artikel|waren|artikel|material(ien)?|positionen)[\s,]+(laut|lt\.?|gemäß|gem\.|siehe)\s+(lieferschein|ls)\b/i;
 export const LIEFERSCHEIN_CODE = "leistung_nur_lieferschein";
 
 export function hasErrors(findings: Finding[]): boolean {

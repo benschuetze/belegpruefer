@@ -358,10 +358,10 @@ const when = (d: Date | string) => new Date(d).toLocaleString("de-DE", { timeZon
  * moment it was festgeschrieben. For an accounting firm this is the entry that matters most.
  */
 function HumanSteps({ reviews, bookings }: { reviews: Review[]; bookings: Booking[] }) {
-  const lockedAt = bookings
-    .filter((b) => b.lockedAt && !b.reversalOf)
-    .map((b) => new Date(b.lockedAt as Date))
-    .sort((a, b) => a.getTime() - b.getTime())[0];
+  // One entry per Festschreiben: a correction booked later gets locked with a later period.
+  const lockTimes = [...new Set(bookings.flatMap((b) => (b.lockedAt ? [new Date(b.lockedAt).getTime()] : [])))].sort(
+    (a, b) => a - b,
+  );
   const steps = [
     ...reviews.map((r) => {
       const before = choices(r.before);
@@ -370,24 +370,21 @@ function HumanSteps({ reviews, bookings }: { reviews: Review[]; bookings: Bookin
         r.result === "ok"
           ? `${r.userLabel} hat den Vorschlag bestätigt: ${describe(after)}`
           : `${r.userLabel} hat die Kontierung geändert: ${describe(before)} → ${describe(after)}`;
-      return { at: new Date(r.createdAt), text, kind: r.result === "ok" ? "Bestätigt" : "Korrigiert" };
+      return { key: r.id, at: new Date(r.createdAt), text, kind: r.result === "ok" ? "Bestätigt" : "Korrigiert" };
     }),
-    ...(lockedAt
-      ? [
-          {
-            at: lockedAt,
-            text: "Zeitraum festgeschrieben: die Buchungen sind unveränderbar, Korrektur nur per Storno.",
-            kind: "Festgeschrieben",
-          },
-        ]
-      : []),
+    ...lockTimes.map((t) => ({
+      key: `fest-${t}`,
+      at: new Date(t),
+      text: "Zeitraum festgeschrieben: die Buchungen sind unveränderbar, Korrektur nur per Storno.",
+      kind: "Festgeschrieben",
+    })),
   ].sort((a, b) => a.at.getTime() - b.at.getTime());
   if (steps.length === 0) return null;
   return (
     <ol className="ink-card space-y-2" aria-label="Schritte von Menschen" data-testid="menschliche-schritte">
       <li className="pixel">Von Menschen</li>
       {steps.map((step) => (
-        <li key={`${step.kind}-${step.at.getTime()}`} className="grid gap-x-3 text-[14px] sm:grid-cols-[8rem_1fr_auto]">
+        <li key={step.key} className="grid gap-x-3 text-[14px] sm:grid-cols-[8rem_1fr_auto]">
           <span className="font-semibold">{step.kind}</span>
           <span className="min-w-0 break-words">{step.text}</span>
           <span className="num text-[12px] text-muted-ink sm:text-right">{when(step.at)}</span>

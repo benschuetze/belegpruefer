@@ -1,5 +1,5 @@
 {
- "measuredAt": "2026-10-14",
+ "measuredAt": "2026-10-12",
  "note": "Ein Lauf je Aufstellung, keine Wiederholungen: Unterschiede von ein, zwei Belegen liegen im Rauschen. Die Belege sind aus Vorlagen erzeugt und damit leichter als echte Rechnungen.",
  "cases": 165,
  "models": {
@@ -1261,5 +1261,5 @@
   "Der Prüfer lohnt sich auf diesem Set nicht: Er hat nur bei vier Belegen widersprochen, die der Kontierer ohnehin unsicher gemeldet hatte, und keine falsche automatische Buchung zusätzlich verhindert, kostet aber das 22-Fache (0,35 ct je Beleg).",
   "Recherche und Beispiele aus der Historie bringen hier nichts Messbares; der Kontierer allein kontiert alle 161 bestimmbaren Belege richtig. Eine frühere Fassung dieses Fazits sah einen Gewinn durch Beispiele – der kam nur aus vier Lieferschein-Belegen, bei denen frühere Fälle mit derselben (inzwischen korrigierten) Erwartung als Beispiel dienten."
  ],
- "erwartungGeaendert": "2026-10-14: Belege mit „Diverses laut Lieferschein“ (B154–B157) erwarten kein bestimmtes Konto mehr, nur „prüfen, Lieferschein anfordern“. Neu bewertet aus den gespeicherten Antworten, ohne neuen Modelllauf."
+ "erwartungGeaendert": "14.10.2026: Belege mit „Diverses laut Lieferschein“ (B154–B157) erwarten kein bestimmtes Konto mehr, nur „prüfen, Lieferschein anfordern“, und der Validator meldet solche Leistungsbeschreibungen. Neu bewertet aus den gespeicherten Antworten vom 12.10. mit der aktuellen Entscheidungsregel, ohne neuen Modelllauf."
 }

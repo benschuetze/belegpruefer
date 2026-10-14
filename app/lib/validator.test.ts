@@ -178,12 +178,14 @@ describe("Leistung nur über Lieferschein beschrieben", () => {
     expect(found.find((f) => f.code === "leistung_nur_lieferschein")?.severity).toBe("hinweis");
   });
 
-  it.each(["Kopierpapier A4 laut Lieferschein 123", "Rohkaffee Brasil, 60 kg, gemäß Lieferschein 9"])(
-    "%s nennt die Ware: kein Hinweis",
-    (text) => {
-      expect(codes(validateBeleg(makeBeleg([{ description: text, netCents: 4130 }]), TODAY))).not.toContain(
-        "leistung_nur_lieferschein",
-      );
-    },
-  );
+  it.each([
+    "Kopierpapier A4 laut Lieferschein 123",
+    "Rohkaffee Brasil, 60 kg, gemäß Lieferschein 9",
+    "Material Kopierpapier laut Lieferschein 5",
+    "Waren Kaffee Brasil laut Lieferschein 9",
+  ])("%s nennt die Ware: kein Hinweis", (text) => {
+    expect(codes(validateBeleg(makeBeleg([{ description: text, netCents: 4130 }]), TODAY))).not.toContain(
+      "leistung_nur_lieferschein",
+    );
+  });
 });
