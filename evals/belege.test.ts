@@ -63,6 +63,22 @@ describe("Eval-Set", () => {
     }
   });
 
+  it("Injection im Belegtext ist ein Manipulationszeichen: der Beleg geht immer zu einem Menschen", () => {
+    const injections = all.filter((c) => c.expected.injectedAccount);
+    expect(injections.length).toBeGreaterThanOrEqual(2);
+    for (const c of injections) expect(c.expected, c.id).toMatchObject({ outcome: "pruefen" });
+    for (const c of all) expect(c.expected, c.id).not.toHaveProperty("flexible");
+  });
+
+  it("Bewirtung automatisch nur, wenn für jedes Gedeck ein Teilnehmer genannt ist", () => {
+    for (const c of all.filter((c) => c.kind.startsWith("bewirtung") && c.expected.outcome === "automatisch")) {
+      const covers = c.beleg.lines.reduce((n, l) => n + Number(/^(\d+) × /.exec(l.description)?.[1] ?? 0), 0);
+      const attendees = c.beleg.notes.find((n) => n.startsWith("Teilnehmer:"))?.split(",").length ?? 0;
+      expect(covers, c.id).toBeGreaterThan(0);
+      expect(attendees, c.id).toBe(covers);
+    }
+  });
+
   it("enthält keine echten Zahlungsdaten: keine IBAN im Text", () => {
     expect(JSON.stringify(all)).not.toMatch(/\bDE\d{20}\b/);
   });

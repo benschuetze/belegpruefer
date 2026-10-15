@@ -14,7 +14,7 @@ export function checklistEntry(c: EvalCase): string {
   const expected = c.expected.lines
     .map((l) => `${l.satz} %: ${accountLabel(l.konto)}, BU ${l.bu || "leer"}`)
     .join(" · ");
-  return `- [ ] **${c.id}** ${c.tenantName} ← ${b.supplier.name} (${b.supplier.country ?? "DE"}): ${items}. Brutto ${euro(b.totals.grossCents)}.${gaps}${b.notes.length ? ` Hinweise: ${b.notes.join(" / ")}.` : ""}\n  Erwartet: ${expected} → **${c.expected.outcome}**${c.expected.flexible ? " (automatisch mit richtigem Konto auch ok)" : ""}${c.note ? `\n  Notiz: ${c.note}` : ""}`;
+  return `- [ ] **${c.id}** ${c.tenantName} ← ${b.supplier.name} (${b.supplier.country ?? "DE"}): ${items}. Brutto ${euro(b.totals.grossCents)}.${gaps}${b.notes.length ? ` Hinweise: ${b.notes.join(" / ")}.` : ""}\n  Erwartet: ${expected} → **${c.expected.outcome}**${c.note ? `\n  Notiz: ${c.note}` : ""}`;
 }
 
 /** A ticked box or a reviewer's note means a person already worked through the file. */
