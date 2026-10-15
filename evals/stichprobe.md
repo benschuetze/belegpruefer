@@ -41,6 +41,7 @@ Geprüft von: Benjamin Schütze am 15.10.2026
   Erwartet: 0 %: 4964 Aufwendungen für die zeitlich befristete Überlassung von Rechten (Lizenzen, Software-Abos), BU 46 → **automatisch**
 - [x] **B103** Feldbach Design GmbH ← Bistro Kranich (DE): 3 × Mittagsmenü (19 %, 47,51 € netto); Getränke (19 %, 27,06 € netto). Brutto 88,74 €. Hinweise: Anlass: Projektbesprechung mit Kunde / Teilnehmer: A. Feld, M. Ost (Kunde).
   Erwartet: 19 %: 4650 Bewirtungskosten, BU 9 → **automatisch**
+  Nachtrag aus dem Review: 3 × Mittagsmenü, aber nur 2 Teilnehmer genannt. Für Bewirtung müssen alle Teilnehmer drauf; offen, ob ein Name fehlt oder der Fall „pruefen“ sein muss.
 - [x] **B112** Rösterei Lindgrün UG ← Elektro Brandt OHG (DE): Aktenschrank abschließbar (19 %, 586,47 € netto). Brutto 697,90 €.
   Erwartet: 19 %: 4855 Sofortabschreibung geringwertiger Wirtschaftsgüter, BU 9 → **automatisch**
 - [x] **B114** Rösterei Lindgrün UG ← Sitzwerk Büromöbel GmbH (DE): Bürostuhl ergonomisch (19 %, 577,42 € netto). Brutto 687,13 €.
