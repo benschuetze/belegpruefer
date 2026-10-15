@@ -126,6 +126,82 @@ describe("Prüfungen, die vom Konto abhängen", () => {
     expect(validateBooking(documented, "4650")).toEqual([]);
   });
 
+  it("Bewirtung mit mehr Gedecken als genannten Teilnehmern ist ein Fehler", () => {
+    const notes = (names: string) => ["Anlass: Projektbesprechung mit Kunde", `Teilnehmer: ${names}`];
+    const lunch = (covers: number, names: string) =>
+      makeBeleg(
+        [
+          { description: `${covers} × Mittagsmenü`, netCents: 9000 },
+          { description: "Getränke", netCents: 2000 },
+        ],
+        { notes: notes(names) },
+      );
+    expect(codes(validateBooking(lunch(3, "A. Feld, M. Ost (Kunde)"), "4650"))).toEqual(["bewirtung_teilnehmer"]);
+    expect(codes(validateBooking(lunch(4, "A. Feld und M. Ost"), "4650"))).toEqual(["bewirtung_teilnehmer"]);
+    expect(validateBooking(lunch(2, "A. Feld, M. Ost (Kunde)"), "4650")).toEqual([]);
+    expect(validateBooking(lunch(3, "A. Feld, M. Ost, K. Brandt"), "4650")).toEqual([]);
+    const dinner = makeBeleg([{ description: "Abendessen, 3 Personen", netCents: 15000 }], {
+      notes: notes("A. Feld, M. Ost"),
+    });
+    expect(codes(validateBooking(dinner, "4650"))).toEqual(["bewirtung_teilnehmer"]);
+  });
+
+  it("Getränke zählen nicht als Gedecke, und ohne erkennbare Gedeckzahl gibt es keinen Alarm", () => {
+    const drinks = makeBeleg(
+      [
+        { description: "2 × Mittagsmenü", netCents: 6000 },
+        { description: "6 × Apfelschorle", netCents: 1800 },
+      ],
+      { notes: ["Anlass: Projektbesprechung", "Teilnehmer: A. Feld, M. Ost"] },
+    );
+    expect(validateBooking(drinks, "4650")).toEqual([]);
+    const unknown = makeBeleg([{ description: "Speisen und Getränke", netCents: 8000 }], {
+      notes: ["Anlass: Projektbesprechung", "Teilnehmer: A. Feld"],
+    });
+    expect(validateBooking(unknown, "4650")).toEqual([]);
+  });
+
+  it("Teilnehmer in üblichen Schreibweisen werden richtig gezählt", () => {
+    const meal = (names: string, covers = 2) =>
+      makeBeleg([{ description: `${covers}x Menü`, netCents: 6000 }], {
+        notes: ["Anlass: Workshop mit Teilnehmern der Firma X", `Teilnehmer: ${names}`],
+      });
+    for (const names of ["A. Feld & M. Ost", "A. Feld u. M. Ost", "A. Feld + M. Ost", "Feld, A.; Ost, M."]) {
+      expect(validateBooking(meal(names), "4650"), names).toEqual([]);
+    }
+    expect(codes(validateBooking(meal("A. Feld, M. Ost und 2 Kollegen", 4), "4650"))).toEqual(["bewirtung_teilnehmer"]);
+    expect(codes(validateBooking(meal("Team Vertrieb (5 Personen)", 5), "4650"))).toEqual(["bewirtung_teilnehmer"]);
+  });
+
+  it("Zahlen, die keine Gedecke sind, lösen keinen Alarm aus", () => {
+    const documented = { notes: ["Anlass: Projektbesprechung", "Teilnehmer: A. Feld, M. Ost"] };
+    for (const description of [
+      "25 × Brötchen (Frühstücksbuffet)",
+      "2 × Kaffee zum Frühstück",
+      "10 x Getränke zum Essen",
+      "Raum für 20 Personen",
+      "Pauschale bis 12 Personen",
+    ]) {
+      expect(validateBooking(makeBeleg([{ description, netCents: 5000 }], documented), "4650"), description).toEqual(
+        [],
+      );
+    }
+  });
+
+  it("E-Rechnung mit Menge im Mengenfeld: die Menge zählt als Gedecke", () => {
+    const einvoice = makeBeleg([{ description: "Mittagsmenü", netCents: 9000, quantity: 3 }], {
+      notes: ["Anlass: Projektbesprechung", "Teilnehmer: A. Feld, M. Ost"],
+    });
+    expect(codes(validateBooking(einvoice, "4650"))).toEqual(["bewirtung_teilnehmer"]);
+  });
+
+  it("ohne Teilnehmerliste mit Doppelpunkt keine Zählung, nur die Prüfung auf Angaben", () => {
+    const loose = makeBeleg([{ description: "3 × Mittagsmenü", netCents: 9000 }], {
+      notes: ["Anlass: Projektbesprechung, Teilnehmer siehe Rückseite"],
+    });
+    expect(validateBooking(loose, "4650")).toEqual([]);
+  });
+
   it("GWG-Grenze gilt je Stück: zwei Monitore à 499 € sind zwei GWG, ein Laptop für 1.400 € nicht", () => {
     const monitors = makeBeleg([{ description: "Monitor 27 Zoll", netCents: 99800, quantity: 2 }]);
     expect(validateBooking(monitors, "4855")).toEqual([]);

@@ -56,6 +56,7 @@ describe("Eval-Set", () => {
       if (
         c.kind.startsWith("fehler_") ||
         c.kind === "bewirtung_ohne_angaben" ||
+        c.kind === "bewirtung_teilnehmer_fehlen" ||
         c.kind === "reverse_charge_ohne_hinweis"
       ) {
         expect(hasErrors(findings), `${c.id} ${c.kind}`).toBe(true);
