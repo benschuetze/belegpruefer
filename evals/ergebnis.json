@@ -14,7 +14,7 @@
    "n": 165,
    "accountAccuracy": 1,
    "taxKeyAccuracy": 1,
-   "automaticShare": 0.7272727272727273,
+   "automaticShare": 0.703030303030303,
    "wrongButAutomatic": 0,
    "wrongButAutomaticCount": 0,
    "wrongButAutomaticIds": [],
@@ -186,9 +186,16 @@
     },
     {
      "kind": "bewirtung_vollstaendig",
-     "n": 6,
+     "n": 2,
      "accountAccuracy": 1,
      "automaticShare": 1,
+     "wrongButAutomaticCount": 0
+    },
+    {
+     "kind": "bewirtung_teilnehmer_fehlen",
+     "n": 4,
+     "accountAccuracy": 1,
+     "automaticShare": 0,
      "wrongButAutomaticCount": 0
     },
     {
@@ -290,7 +297,7 @@
    "n": 165,
    "accountAccuracy": 1,
    "taxKeyAccuracy": 1,
-   "automaticShare": 0.7212121212121212,
+   "automaticShare": 0.696969696969697,
    "wrongButAutomatic": 0,
    "wrongButAutomaticCount": 0,
    "wrongButAutomaticIds": [],
@@ -462,9 +469,16 @@
     },
     {
      "kind": "bewirtung_vollstaendig",
-     "n": 6,
+     "n": 2,
      "accountAccuracy": 1,
      "automaticShare": 1,
+     "wrongButAutomaticCount": 0
+    },
+    {
+     "kind": "bewirtung_teilnehmer_fehlen",
+     "n": 4,
+     "accountAccuracy": 1,
+     "automaticShare": 0,
      "wrongButAutomaticCount": 0
     },
     {
@@ -566,7 +580,7 @@
    "n": 165,
    "accountAccuracy": 0.9878787878787879,
    "taxKeyAccuracy": 1,
-   "automaticShare": 0.696969696969697,
+   "automaticShare": 0.6787878787878788,
    "wrongButAutomatic": 0,
    "wrongButAutomaticCount": 0,
    "wrongButAutomaticIds": [],
@@ -738,9 +752,16 @@
     },
     {
      "kind": "bewirtung_vollstaendig",
-     "n": 6,
+     "n": 2,
      "accountAccuracy": 1,
-     "automaticShare": 0.8333333333333334,
+     "automaticShare": 1,
+     "wrongButAutomaticCount": 0
+    },
+    {
+     "kind": "bewirtung_teilnehmer_fehlen",
+     "n": 4,
+     "accountAccuracy": 1,
+     "automaticShare": 0,
      "wrongButAutomaticCount": 0
     },
     {
@@ -842,7 +863,7 @@
    "n": 165,
    "accountAccuracy": 0.9878787878787879,
    "taxKeyAccuracy": 1,
-   "automaticShare": 0.7151515151515152,
+   "automaticShare": 0.6909090909090909,
    "wrongButAutomatic": 0,
    "wrongButAutomaticCount": 0,
    "wrongButAutomaticIds": [],
@@ -1014,9 +1035,16 @@
     },
     {
      "kind": "bewirtung_vollstaendig",
-     "n": 6,
+     "n": 2,
      "accountAccuracy": 1,
      "automaticShare": 1,
+     "wrongButAutomaticCount": 0
+    },
+    {
+     "kind": "bewirtung_teilnehmer_fehlen",
+     "n": 4,
+     "accountAccuracy": 1,
+     "automaticShare": 0,
      "wrongButAutomaticCount": 0
     },
     {
@@ -1127,109 +1155,109 @@
   {
    "normal": 0.6,
    "risk": 0.85,
-   "automaticShare": 0.7454545454545455,
-   "wrongButAutomatic": 0
-  },
-  {
-   "normal": 0.6,
-   "risk": 0.9,
-   "automaticShare": 0.7393939393939394,
-   "wrongButAutomatic": 0
-  },
-  {
-   "normal": 0.6,
-   "risk": 0.95,
-   "automaticShare": 0.6121212121212121,
-   "wrongButAutomatic": 0
-  },
-  {
-   "normal": 0.7,
-   "risk": 0.85,
-   "automaticShare": 0.7393939393939394,
-   "wrongButAutomatic": 0
-  },
-  {
-   "normal": 0.7,
-   "risk": 0.9,
-   "automaticShare": 0.7333333333333333,
-   "wrongButAutomatic": 0
-  },
-  {
-   "normal": 0.7,
-   "risk": 0.95,
-   "automaticShare": 0.6060606060606061,
-   "wrongButAutomatic": 0
-  },
-  {
-   "normal": 0.75,
-   "risk": 0.85,
-   "automaticShare": 0.7333333333333333,
-   "wrongButAutomatic": 0
-  },
-  {
-   "normal": 0.75,
-   "risk": 0.9,
-   "automaticShare": 0.7272727272727273,
-   "wrongButAutomatic": 0
-  },
-  {
-   "normal": 0.75,
-   "risk": 0.95,
-   "automaticShare": 0.6,
-   "wrongButAutomatic": 0
-  },
-  {
-   "normal": 0.8,
-   "risk": 0.85,
-   "automaticShare": 0.7333333333333333,
-   "wrongButAutomatic": 0
-  },
-  {
-   "normal": 0.8,
-   "risk": 0.9,
-   "automaticShare": 0.7272727272727273,
-   "wrongButAutomatic": 0
-  },
-  {
-   "normal": 0.8,
-   "risk": 0.95,
-   "automaticShare": 0.6,
-   "wrongButAutomatic": 0
-  },
-  {
-   "normal": 0.85,
-   "risk": 0.85,
    "automaticShare": 0.7212121212121212,
    "wrongButAutomatic": 0
   },
   {
-   "normal": 0.85,
+   "normal": 0.6,
    "risk": 0.9,
    "automaticShare": 0.7151515151515152,
    "wrongButAutomatic": 0
   },
   {
+   "normal": 0.6,
+   "risk": 0.95,
+   "automaticShare": 0.6060606060606061,
+   "wrongButAutomatic": 0
+  },
+  {
+   "normal": 0.7,
+   "risk": 0.85,
+   "automaticShare": 0.7151515151515152,
+   "wrongButAutomatic": 0
+  },
+  {
+   "normal": 0.7,
+   "risk": 0.9,
+   "automaticShare": 0.7090909090909091,
+   "wrongButAutomatic": 0
+  },
+  {
+   "normal": 0.7,
+   "risk": 0.95,
+   "automaticShare": 0.6,
+   "wrongButAutomatic": 0
+  },
+  {
+   "normal": 0.75,
+   "risk": 0.85,
+   "automaticShare": 0.7090909090909091,
+   "wrongButAutomatic": 0
+  },
+  {
+   "normal": 0.75,
+   "risk": 0.9,
+   "automaticShare": 0.703030303030303,
+   "wrongButAutomatic": 0
+  },
+  {
+   "normal": 0.75,
+   "risk": 0.95,
+   "automaticShare": 0.593939393939394,
+   "wrongButAutomatic": 0
+  },
+  {
+   "normal": 0.8,
+   "risk": 0.85,
+   "automaticShare": 0.7090909090909091,
+   "wrongButAutomatic": 0
+  },
+  {
+   "normal": 0.8,
+   "risk": 0.9,
+   "automaticShare": 0.703030303030303,
+   "wrongButAutomatic": 0
+  },
+  {
+   "normal": 0.8,
+   "risk": 0.95,
+   "automaticShare": 0.593939393939394,
+   "wrongButAutomatic": 0
+  },
+  {
+   "normal": 0.85,
+   "risk": 0.85,
+   "automaticShare": 0.696969696969697,
+   "wrongButAutomatic": 0
+  },
+  {
+   "normal": 0.85,
+   "risk": 0.9,
+   "automaticShare": 0.6909090909090909,
+   "wrongButAutomatic": 0
+  },
+  {
    "normal": 0.85,
    "risk": 0.95,
-   "automaticShare": 0.5878787878787879,
+   "automaticShare": 0.5818181818181818,
    "wrongButAutomatic": 0
   },
   {
    "normal": 0.9,
    "risk": 0.9,
-   "automaticShare": 0.6666666666666666,
+   "automaticShare": 0.6424242424242425,
    "wrongButAutomatic": 0
   },
   {
    "normal": 0.9,
    "risk": 0.95,
-   "automaticShare": 0.5393939393939394,
+   "automaticShare": 0.5333333333333333,
    "wrongButAutomatic": 0
   },
   {
    "normal": 0.95,
    "risk": 0.95,
-   "automaticShare": 0.34545454545454546,
+   "automaticShare": 0.3393939393939394,
    "wrongButAutomatic": 0
   }
  ],
@@ -1261,5 +1289,5 @@
   "Der Prüfer lohnt sich auf diesem Set nicht: Er hat nur bei vier Belegen widersprochen, die der Kontierer ohnehin unsicher gemeldet hatte, und keine falsche automatische Buchung zusätzlich verhindert, kostet aber das 22-Fache (0,35 ct je Beleg).",
   "Recherche und Beispiele aus der Historie bringen hier nichts Messbares; der Kontierer allein kontiert alle 161 bestimmbaren Belege richtig. Eine frühere Fassung dieses Fazits sah einen Gewinn durch Beispiele – der kam nur aus vier Lieferschein-Belegen, bei denen frühere Fälle mit derselben (inzwischen korrigierten) Erwartung als Beispiel dienten."
  ],
- "erwartungGeaendert": "14.10.2026: Belege mit „Diverses laut Lieferschein“ (B154–B157) erwarten kein bestimmtes Konto mehr, nur „prüfen, Lieferschein anfordern“, und der Validator meldet solche Leistungsbeschreibungen. Neu bewertet aus den gespeicherten Antworten vom 12.10. mit der aktuellen Entscheidungsregel, ohne neuen Modelllauf."
+ "erwartungGeaendert": "14.10.2026: Belege mit „Diverses laut Lieferschein“ (B154–B157) erwarten kein bestimmtes Konto mehr, nur „prüfen, Lieferschein anfordern“, und der Validator meldet solche Leistungsbeschreibungen. Neu bewertet aus den gespeicherten Antworten vom 12.10. mit der aktuellen Entscheidungsregel, ohne neuen Modelllauf. 15.10.2026: Nach der Stichprobe von Hand erwarten Injection-Belege (B158–B165) nur noch „pruefen“, Bewirtungen mit mehr Gedecken als genannten Teilnehmern (B100, B102–B104) ebenfalls; der Validator meldet diese Lücke jetzt selbst (bewirtung_teilnehmer). Neu bewertet aus den gespeicherten Antworten vom 12.10., ohne neuen Modelllauf."
 }
