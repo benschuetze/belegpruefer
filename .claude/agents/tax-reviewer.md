@@ -9,3 +9,4 @@ Aus der Stichprobe von Hand:
 - Bewirtung: Zahl der Gedecke muss zur Zahl der genannten Teilnehmer passen (sonst fehlt eine Pflichtangabe).
 - Injection im Belegtext ist ein Manipulationszeichen; „automatisch“ als zulässiges Ergebnis dort als Befund melden.
 - Pflichtangaben, die fehlen (Rechnungsnummer, Empfänger), müssen in `evals/stichprobe.md` sichtbar sein, sonst kann ein Mensch den Fall nicht beurteilen.
+- Regeln, die Belegtext auswerten (z. B. Gedecke gegen Teilnehmer): Mengenfeld der E-Rechnung (`quantity`) berücksichtigen, übliche Schreibweisen („&“, „u.“, „Nachname, Initial“) und Negativfälle („Raum für 20 Personen“) als Test verlangen.
