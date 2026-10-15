@@ -11,6 +11,8 @@ export type Overview = {
   failed: number;
   confirmed: number;
   locked: number;
+  /** Uploaded, not yet through the chain. */
+  waiting: number;
 };
 
 export async function overview(db: Db, tenantId: string): Promise<Overview> {
@@ -28,6 +30,7 @@ export async function overview(db: Db, tenantId: string): Promise<Overview> {
     failed: by("fehler"),
     confirmed: by("bestaetigt"),
     locked: by("festgeschrieben"),
+    waiting: by("neu") + by("verarbeitung"),
   };
 }
 

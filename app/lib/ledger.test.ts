@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { createTestDb } from "../../tests/helpers/db";
+import { createTestDb, dbRefusal } from "../../tests/helpers/db";
 import { NO_RESEARCH, team } from "../../tests/helpers/models";
 import type { BookingLine, KontiererOutput } from "./agents/kontierer";
 import { bookings, documents, reviews } from "./db/schema";
@@ -24,8 +24,8 @@ const PAPER: KontiererOutput = {
   begruendung: "Papier und Fachbuch",
 };
 
-async function setup(kontierer: unknown = PAPER, pruefer: unknown = undefined) {
-  const { db } = await createTestDb();
+async function setup(kontierer: unknown = PAPER, pruefer: unknown = undefined, as: "app" | "owner" = "app") {
+  const { db } = await createTestDb({ as });
   const stored = await storeUpload(
     db,
     A,
@@ -76,7 +76,7 @@ describe("Prüfen: bestätigen oder ändern", () => {
 
   it("ein anderer Mandant kann den Beleg nicht bestätigen", async () => {
     const { db, id } = await setup(PAPER, { urteil: "einwand", begruendung: "x" });
-    await expect(confirmDocument(db, B, id, PAPER.zeilen, "Demo", TODAY)).rejects.toThrow(/nicht gefunden/);
+    expect(await dbRefusal(confirmDocument(db, B, id, PAPER.zeilen, "Demo", TODAY))).toMatch(/nicht gefunden/);
   });
 });
 
@@ -84,13 +84,41 @@ describe("Festschreiben und Storno", () => {
   it("festgeschriebene Buchungen kann die Datenbank weder ändern noch löschen", async () => {
     const { db } = await setup();
     await lockPeriod(db, A, "2026-09-01", "2026-09-30");
-    await expect(db.update(bookings).set({ account: "4900" })).rejects.toThrow();
-    await expect(db.delete(bookings)).rejects.toThrow();
+    // The runtime role may only set locked_at and delete unlocked bookings; for locked ones the trigger says no.
+    expect(await dbRefusal(db.update(bookings).set({ lockedAt: null }))).toMatch(/festgeschrieben/);
+    expect(await dbRefusal(db.delete(bookings))).toMatch(/festgeschrieben/);
+  });
+
+  it("festgeschriebene Buchungen bleiben auch für den Eigentümer der Tabellen endgültig", async () => {
+    const { db } = await setup(PAPER, undefined, "owner");
+    await lockPeriod(db, A, "2026-09-01", "2026-09-30");
+    expect(await dbRefusal(db.update(bookings).set({ account: "4900" }))).toMatch(/festgeschrieben/);
+  });
+
+  it("ein Beleg behält Datei und Inhalt; festgeschrieben geht er nur per Storno zurück", async () => {
+    const { db, id } = await setup(PAPER, undefined, "owner");
+    expect(await dbRefusal(db.update(documents).set({ content: "eA==" }).where(eq(documents.id, id)))).toMatch(
+      /unveränderbar/,
+    );
+    expect(
+      await dbRefusal(
+        db
+          .update(documents)
+          .set({ findings: [{ code: "x", severity: "hinweis", message: "nachträglich" }] })
+          .where(eq(documents.id, id)),
+      ),
+    ).toMatch(/nur während der Verarbeitung/);
+    await lockPeriod(db, A, "2026-09-01", "2026-09-30");
+    expect(await dbRefusal(db.update(documents).set({ status: "neu" }).where(eq(documents.id, id)))).toMatch(
+      /nur Storno/,
+    );
+    // The Storno path itself still works.
+    await reverseAndRebook(db, A, id, PAPER.zeilen, "Demo", TODAY);
   });
 
   it("Festschreiben verweigert, solange im Zeitraum Belege offen sind", async () => {
     const { db } = await setup(PAPER, { urteil: "einwand", begruendung: "x" });
-    await expect(lockPeriod(db, A, "2026-09-01", "2026-09-30")).rejects.toThrow(/noch offen/);
+    expect(await dbRefusal(lockPeriod(db, A, "2026-09-01", "2026-09-30"))).toMatch(/noch offen/);
     // Other periods are not affected.
     await expect(lockPeriod(db, A, "2026-08-01", "2026-08-31")).resolves.toMatchObject({ total: 0 });
   });
@@ -150,13 +178,13 @@ describe("Festschreiben und Storno", () => {
 
   it("Storno nur für festgeschriebene Belege", async () => {
     const { db, id } = await setup();
-    await expect(reverseAndRebook(db, A, id, PAPER.zeilen, "Demo", TODAY)).rejects.toThrow(/festgeschriebene/);
+    expect(await dbRefusal(reverseAndRebook(db, A, id, PAPER.zeilen, "Demo", TODAY))).toMatch(/festgeschriebene/);
   });
 
-  it("Reviews sind nur anhängend", async () => {
-    const { db, id } = await setup(PAPER, { urteil: "einwand", begruendung: "x" });
+  it("Reviews sind nur anhängend, selbst für den Eigentümer der Tabellen", async () => {
+    const { db, id } = await setup(PAPER, { urteil: "einwand", begruendung: "x" }, "owner");
     await confirmDocument(db, A, id, PAPER.zeilen, "Demo", TODAY);
-    await expect(db.execute(sql`update reviews set user_label = 'x'`)).rejects.toThrow();
-    await expect(db.execute(sql`delete from reviews`)).rejects.toThrow();
+    expect(await dbRefusal(db.execute(sql`update reviews set user_label = 'x'`))).toMatch(/nur anhängend/);
+    expect(await dbRefusal(db.execute(sql`delete from reviews`))).toMatch(/nur anhängend/);
   });
 });

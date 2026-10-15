@@ -1,9 +1,12 @@
 import "dotenv/config";
-import { getDb } from "~/lib/db/client";
+import { createDb } from "~/lib/db/client";
 import { loadDemoData, markDemoDataLoaded, resetDemoDataIfOutdated } from "~/lib/db/demo-data";
 import { seed } from "~/lib/db/seed";
 
-const db = getDb();
+// Owner (DATABASE_URL), not the app's role: creating tenants and the demo reset are beyond it, on purpose.
+const url = process.env.DATABASE_URL;
+if (!url) throw new Error("DATABASE_URL fehlt");
+const db = createDb(url);
 await seed(db);
 console.log("Mandanten angelegt");
 // The public demo and local development start with invented invoices; a private instance starts empty.

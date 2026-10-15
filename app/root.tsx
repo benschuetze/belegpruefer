@@ -26,7 +26,7 @@ export const middleware: Route.MiddlewareFunction[] = [
       if (isCrossSiteWrite(request)) {
         throw new Response("Anfrage von fremder Seite abgelehnt.", { status: 403 });
       }
-      await guard(request);
+      await guard(request, getDb());
     } catch (error) {
       if (error instanceof Response) applySecurityHeaders(error.headers);
       throw error;

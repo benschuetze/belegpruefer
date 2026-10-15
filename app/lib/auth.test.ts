@@ -1,13 +1,23 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createTestDb } from "../../tests/helpers/db";
-import { currentTenant, guard, isLoggedIn, switchTenant } from "./auth.server";
-import { DEMO_TENANTS } from "./db/seed";
+import { currentTenant, guard, isLoggedIn, safeRedirect, switchTenant } from "./auth.server";
+import type { Db } from "./db/client";
+import { tenants } from "./db/schema";
+import { DEMO_TENANTS, markDemoDatabase } from "./db/seed";
+import { storeUpload } from "./documents.server";
 
 afterEach(() => vi.unstubAllEnvs());
 
-async function status(request: Request): Promise<number | "ok"> {
+/** A database the public demo's build has claimed: the only kind demo mode may run on. */
+async function demoDb(): Promise<Db> {
+  const { db } = await createTestDb();
+  await markDemoDatabase(db);
+  return db;
+}
+
+async function status(request: Request, db?: Db): Promise<number | "ok"> {
   try {
-    await guard(request);
+    await guard(request, db ?? (await demoDb()));
     return "ok";
   } catch (e) {
     if (e instanceof Response) return e.status;
@@ -22,6 +32,25 @@ describe("Zugang", () => {
     expect(await status(new Request("http://x/belege", { method: "POST" }))).toBe(403);
     expect(await status(new Request("http://x/export.data", { method: "POST" }))).toBe(403);
     expect(await status(new Request("http://x/mandant", { method: "POST" }))).toBe("ok");
+  });
+
+  it("Demo-Modus auf einer Datenbank mit echten Mandanten: alles gesperrt statt alles offen", async () => {
+    // A wrongly set DEMO_MODE on a real instance would otherwise publish every invoice without a login.
+    vi.stubEnv("DEMO_MODE", "true");
+    const { db } = await createTestDb({ as: "owner" });
+    await markDemoDatabase(db);
+    await db.insert(tenants).values({ name: "Echte GmbH", beraterNr: 1, mandantenNr: 2 });
+    expect(await status(new Request("http://x/belege"), db)).toBe(503);
+    expect(await status(new Request("http://x/"), db)).toBe(503);
+    expect(await status(new Request("http://x/mandant", { method: "POST" }), db)).toBe(503);
+  });
+
+  it("Demo-Modus auf einer privaten Instanz, deren Belege unter den festen Mandanten liegen: gesperrt", async () => {
+    // Every instance gets the two seed tenants; their ids alone do not make a database a demo.
+    vi.stubEnv("DEMO_MODE", "true");
+    const { db } = await createTestDb();
+    await storeUpload(db, DEMO_TENANTS[0].id, "echt.xml", Buffer.from("<Invoice/>"));
+    expect(await status(new Request("http://x/belege"), db)).toBe(503);
   });
 
   it("privat ohne Login: Weiterleitung beim Lesen, 401 beim Schreiben", async () => {
@@ -50,5 +79,28 @@ describe("Zugang", () => {
     await expect(switchTenant(db, new Request("http://x/mandant"), DEMO_TENANTS[1].id, "/")).rejects.toMatchObject({
       status: 503,
     });
+  });
+});
+
+describe("Weiterleitung nach Login und Aktionen", () => {
+  it.each(["/belege", "/belege?filter=pruefen", "/belege/abc#x"])("bleibt auf der eigenen Seite: %s", (to) => {
+    expect(safeRedirect(to)).toBe(to);
+  });
+  // Each of these would end up as "//evil.example", which a browser follows to another host.
+  it.each([
+    "//evil.example",
+    "https://evil.example",
+    "/\\evil.example",
+    "/\t/evil.example",
+    "/.//evil.example",
+    "/%2e//evil.example",
+    "/a/..//evil.example",
+    "/./%2e/..//evil.example",
+    "",
+    null,
+  ])("führt nie auf eine fremde Seite: %j", (to) => {
+    const target = safeRedirect(to);
+    expect(target).toMatch(/^\/(?![/\\])/);
+    expect(new URL(target, "https://app.example").origin).toBe("https://app.example");
   });
 });

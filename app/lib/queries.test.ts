@@ -5,7 +5,7 @@ import { DEMO_TENANTS } from "./db/seed";
 import { storeUpload } from "./documents.server";
 import { buildCiiXml } from "./parser/build-cii";
 import { processDocument } from "./process.server";
-import { listDocuments } from "./queries.server";
+import { listDocuments, overview } from "./queries.server";
 
 const A = DEMO_TENANTS[0].id;
 
@@ -30,5 +30,16 @@ describe("Belegliste", () => {
     expect(unreadable.status).toBe("neu");
     const rows = await listDocuments(db, A, "alle");
     expect(rows.map((r) => r.issueDate)).toEqual(["2026-09-28", "2026-09-10", "2026-09-03", null]);
+  });
+});
+
+describe("Übersicht", () => {
+  it("zählt hochgeladene, noch nicht geprüfte Belege als wartend, und die Summe geht auf", async () => {
+    const { db } = await createTestDb();
+    const xml = buildCiiXml(makeBeleg(undefined, { invoiceNumber: "R-9" }));
+    await storeUpload(db, A, "r9.xml", Buffer.from(xml));
+    const n = await overview(db, A);
+    expect(n.waiting).toBe(1);
+    expect(n.received).toBe(n.automatic + n.confirmed + n.locked + n.review + n.failed + n.waiting);
   });
 });

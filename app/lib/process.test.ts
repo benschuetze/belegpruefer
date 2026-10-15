@@ -2,13 +2,13 @@ import { readFileSync } from "node:fs";
 import { and, eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { makeBeleg } from "../../tests/helpers/belege";
-import { createTestDb } from "../../tests/helpers/db";
+import { createTestDb, dbRefusal } from "../../tests/helpers/db";
 import { AGREE, fixedModel, NO_RESEARCH, team } from "../../tests/helpers/models";
 import { bookings, decisions, documents, suppliers } from "./db/schema";
 import { DEMO_TENANTS } from "./db/seed";
 import { storeUpload } from "./documents.server";
 import { buildCiiXml } from "./parser/build-cii";
-import { processDocument, supplierHistory } from "./process.server";
+import { nextInQueue, processDocument, STALE_AFTER_MS, supplierHistory } from "./process.server";
 
 const A = DEMO_TENANTS[0].id;
 const B = DEMO_TENANTS[1].id;
@@ -137,7 +137,8 @@ describe("Durchstich: XML-Beleg bis zur Buchung", () => {
 
 describe("Abbruch ohne halbe Daten", () => {
   it("scheitert das Schreiben der Buchung, gibt es weder Protokoll noch Buchung, nur Status fehler", async () => {
-    const { db } = await createTestDb();
+    // Owner: the test plants a failing trigger, which the runtime role may not.
+    const { db } = await createTestDb({ as: "owner" });
     const id = await upload(db);
     await db.execute(
       sql`create function boom() returns trigger as $$ begin raise exception 'Platte voll'; end; $$ language plpgsql`,
@@ -207,33 +208,38 @@ describe("Mandantentrennung in der Datenbank", () => {
     const { db } = await createTestDb();
     const idA = await upload(db, A);
     const row = { tenantId: B, documentId: idA, runId: idA, role: "validator" as const };
-    await expect(db.insert(decisions).values(row)).rejects.toThrow();
-    await expect(
-      db.insert(bookings).values({
-        tenantId: B,
-        documentId: idA,
-        bookingDate: TODAY,
-        amountCents: 100,
-        account: "4930",
-        contraAccount: "1600",
-        taxKey: "9",
-        text: "x",
-        reference: "x",
-        source: "manuell",
-      }),
-    ).rejects.toThrow();
+    // Matching the message: a refusal for any other reason (e.g. missing rights) would prove nothing here.
+    expect(await dbRefusal(db.insert(decisions).values(row))).toMatch(/foreign key/);
+    expect(
+      await dbRefusal(
+        db.insert(bookings).values({
+          tenantId: B,
+          documentId: idA,
+          bookingDate: TODAY,
+          amountCents: 100,
+          account: "4930",
+          contraAccount: "1600",
+          taxKey: "9",
+          text: "x",
+          reference: "x",
+          source: "manuell",
+        }),
+      ),
+    ).toMatch(/foreign key/);
   });
 });
 
 describe("Protokoll ist nur anhängend", () => {
-  it("UPDATE und DELETE auf decisions lehnt die Datenbank ab", async () => {
-    const { db } = await createTestDb();
+  // The runtime role lacks the rights anyway (roles.test.ts). The trigger is the second wall: it holds even for
+  // the owner of the tables, so this test runs as owner.
+  it("UPDATE, DELETE und TRUNCATE auf decisions lehnt die Datenbank selbst dem Eigentümer ab", async () => {
+    const { db } = await createTestDb({ as: "owner" });
     const id = await upload(db);
     await processDocument(db, A, id, { models: team(PAPER), research: NO_RESEARCH, today: TODAY });
-    await expect(db.update(decisions).set({ model: "anders" })).rejects.toThrow();
-    await expect(db.delete(decisions)).rejects.toThrow();
-    await expect(db.execute(sql`truncate decisions`)).rejects.toThrow();
-    await expect(db.execute(sql`truncate reviews`)).rejects.toThrow();
+    expect(await dbRefusal(db.update(decisions).set({ model: "anders" }))).toMatch(/nur anhängend/);
+    expect(await dbRefusal(db.delete(decisions))).toMatch(/nur anhängend/);
+    expect(await dbRefusal(db.execute(sql`truncate decisions`))).toMatch(/nur anhängend/);
+    expect(await dbRefusal(db.execute(sql`truncate reviews`))).toMatch(/nur anhängend/);
     expect((await db.select().from(decisions)).length).toBeGreaterThan(0);
   });
 });
@@ -351,5 +357,105 @@ describe("Historie für Beispiele und Recherche", () => {
     expect(await supplierHistory(db, A, "hotel am hafen a")).toHaveLength(1);
     expect(await supplierHistory(db, A, "Hotel Am Hafen B")).toHaveLength(0);
     expect(await supplierHistory(db, B, "Hotel Am Hafen A")).toHaveLength(0);
+  });
+});
+
+describe("Warteschlange: kein Beleg bleibt hängen, keiner wird doppelt gebucht", () => {
+  const deps = { models: team(PAPER), research: NO_RESEARCH, today: TODAY };
+
+  it("hochgeladene Belege warten in der Reihenfolge des Uploads, nur die des eigenen Mandanten", async () => {
+    const { db } = await createTestDb();
+    const first = await upload(db, A, "xrechnung-papierwerk.xml");
+    const second = await upload(db, A, "zugferd-clickwave.xml");
+    await upload(db, B, "xrechnung-papierwerk.xml");
+    expect(await nextInQueue(db, A, 10)).toEqual([first, second]);
+    expect(await nextInQueue(db, A, 1)).toEqual([first]);
+    await processDocument(db, A, first, deps);
+    expect(await nextInQueue(db, A, 10)).toEqual([second]);
+  });
+
+  it("ein Lauf, der abgebrochen ist (Timeout, Absturz), gibt den Beleg nach einer Weile wieder frei", async () => {
+    const { db } = await createTestDb();
+    const id = await upload(db);
+    const died = new Date(Date.now() - STALE_AFTER_MS - 1000);
+    await db.update(documents).set({ status: "verarbeitung", processingStartedAt: died }).where(eq(documents.id, id));
+    expect(await nextInQueue(db, A, 10)).toEqual([id]);
+    expect((await processDocument(db, A, id, deps)).status).toBe("automatisch");
+  });
+
+  it("ein Lauf, der noch arbeitet, wird nicht überholt", async () => {
+    const { db } = await createTestDb();
+    const id = await upload(db);
+    await db
+      .update(documents)
+      .set({ status: "verarbeitung", processingStartedAt: new Date() })
+      .where(eq(documents.id, id));
+    expect(await nextInQueue(db, A, 10)).toEqual([]);
+    expect((await processDocument(db, A, id, deps)).status).toBe("uebersprungen");
+  });
+
+  it("übernimmt ein zweiter Lauf, schreibt der erste danach nichts mehr: ein Protokoll, eine Buchung", async () => {
+    const { db } = await createTestDb();
+    const id = await upload(db);
+    let release = () => {};
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const slow = team(async () => {
+      await held;
+      return PAPER;
+    });
+    // Run 1 claims and then hangs inside the Kontierer call, long enough to count as dead.
+    const t0 = new Date("2026-10-12T08:00:00Z");
+    const first = processDocument(db, A, id, { ...deps, models: slow, now: () => t0 });
+    await expect
+      .poll(async () => (await db.select().from(documents).where(eq(documents.id, id)))[0]?.status)
+      .toBe("verarbeitung");
+    const later = new Date(t0.getTime() + STALE_AFTER_MS + 1000);
+    expect((await processDocument(db, A, id, { ...deps, now: () => later })).status).toBe("automatisch");
+
+    release();
+    expect((await first).status).toBe("uebersprungen");
+    const runs = new Set((await db.select().from(decisions).where(eq(decisions.documentId, id))).map((d) => d.runId));
+    expect(runs.size).toBe(1);
+    const lines = await db.select().from(bookings).where(eq(bookings.documentId, id));
+    // PAPER books two lines (19 % and 7 %); a second run would have doubled them.
+    expect(lines.length).toBe(2);
+  });
+
+  it("auch auf dem Fehlerweg: ein abgelöster Lauf schreibt nichts und meldet übersprungen statt abzubrechen", async () => {
+    const { db } = await createTestDb();
+    const stored = await storeUpload(db, A, "r.pdf", Buffer.from("%PDF-1.7\n% erfundene Testdatei\n"));
+    if (stored.status !== "neu") throw new Error(stored.status);
+    let release = () => {};
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const unreadable = {
+      ...team(PAPER),
+      extraktor: fixedModel("claude-sonnet-5-5", async () => {
+        await held;
+        return "kein JSON";
+      }),
+    };
+    const t0 = new Date("2026-10-12T08:00:00Z");
+    const first = processDocument(db, A, stored.id, { ...deps, models: unreadable, now: () => t0 });
+    await expect
+      .poll(async () => (await db.select().from(documents).where(eq(documents.id, stored.id)))[0]?.status)
+      .toBe("verarbeitung");
+    const later = new Date(t0.getTime() + STALE_AFTER_MS + 1000);
+    const second = await processDocument(db, A, stored.id, {
+      ...deps,
+      models: { ...team(PAPER), extraktor: fixedModel("claude-sonnet-5-5", "kaputt") },
+      now: () => later,
+    });
+    expect(second.status).toBe("fehler");
+
+    release();
+    expect((await first).status).toBe("uebersprungen");
+    const runs = new Set(
+      (await db.select().from(decisions).where(eq(decisions.documentId, stored.id))).map((d) => d.runId),
+    );
+    expect(runs.size).toBe(1);
   });
 });

@@ -27,7 +27,9 @@ Belegprüfer verarbeitet Rechnungen mehrerer Mandanten und lässt Sprachmodelle 
 
 | Maßnahme | Test |
 |---|---|
-| Protokoll (`decisions`) und Reviews sind nur anhängend. Ein Datenbank-Trigger lehnt UPDATE, DELETE und TRUNCATE ab. | `app/lib/process.test.ts`, `app/lib/ledger.test.ts` |
+| Die App läuft nicht als Eigentümer ihrer Tabellen. Ihre Rolle `belegpruefer_app` hat je Tabelle nur die nötigen Rechte: auf Protokoll, Reviews und Exporte nur SELECT und INSERT, UPDATE nur auf die Spalten, die der Code schreibt (Datei, Hash und Mandant eines Belegs gehören nicht dazu). Kein ALTER, kein TRUNCATE, keine eigenen Tabellen, keine Trigger abschalten. Die App verbindet als Login-Rolle `belegpruefer_web` (Passwort `APP_DB_PASSWORD`, die Rolle legt der Build an), Migrationen, Seed und Demo-Reset laufen als Eigentümer über `DATABASE_URL`. Der Produktions-Build bricht ab, wenn die App-Verbindung mehr dürfte. Alle DB-Tests laufen unter der Laufzeitrolle, damit ein fehlendes oder überzähliges Recht auffällt. | `app/lib/db/roles.test.ts`, `scripts/check-app-role.ts` |
+| Protokoll (`decisions`) und Reviews sind nur anhängend. Ein Datenbank-Trigger lehnt UPDATE, DELETE und TRUNCATE ab, auch wenn der Eigentümer es versucht. Abschalten kann ihn nur der Eigentümer bewusst per `ALTER TABLE … DISABLE TRIGGER`, wie es der Demo-Reset tut. Das ist die zweite Wand hinter den fehlenden Rechten. | `app/lib/process.test.ts`, `app/lib/ledger.test.ts` |
+| Ein Beleg ist ebenfalls Beweismittel: Datei, Hash und Mandant ändern sich nie, der gelesene Inhalt nur während der Verarbeitung durch den Lauf, der ihn beansprucht hat. Festgeschrieben geht er nur per Storno zurück auf „bestätigt“. | `app/lib/ledger.test.ts` |
 | Festgeschriebene Buchungen sind unveränderbar, ebenfalls per Trigger. Korrigiert wird nur per Storno plus neuer Buchung im laufenden Zeitraum. | `app/lib/ledger.test.ts`, `tests/e2e/export.spec.ts` |
 | Ein Beleg wird in einer Transaktion verarbeitet: entweder alles oder nichts. Nach einem Abbruch steht er auf „fehler“ und kann erneut verarbeitet werden. | `app/lib/process.test.ts` („Abbruch ohne halbe Daten“) |
 | Buchen und Festschreiben eines Mandanten laufen unter einer Sperre. So rutscht nichts in einen Zeitraum, der gerade geschlossen wird. | `app/lib/process.server.ts` (`lockLedger`) |
@@ -40,12 +42,16 @@ Belegprüfer verarbeitet Rechnungen mehrerer Mandanten und lässt Sprachmodelle 
 - Login-Bremse je IP. Erst wird der Versuch eingetragen, dann gezählt, damit parallele Anfragen das Limit nicht umgehen.
 - XML mit DOCTYPE wird abgelehnt, also kein XXE und keine Entity-Expansion. Der Dateityp wird am Inhalt erkannt, nicht am Namen.
 - Originaldateien und Exporte werden nur als Download ausgeliefert, nie im Ursprung der App dargestellt.
-- Die öffentliche Demo ist schreibgeschützt. Nur der Mandanten-Umschalter darf schreiben.
+- Die öffentliche Demo ist schreibgeschützt. Nur der Mandanten-Umschalter darf schreiben. Der Demo-Modus läuft nur auf einer Datenbank, die der Demo-Build ausdrücklich als Demo markiert hat und die nur die erfundenen Mandanten enthält. Sonst antwortet jede Seite mit 503, und der Reset löscht nichts. Ein falsch gesetztes `DEMO_MODE=true` macht eine echte Instanz also nicht öffentlich (`app/lib/auth.test.ts`, `app/lib/db/demo-data.test.ts`).
+- Weiterleitungen nach Login und Aktionen gehen nur auf eigene Pfade, auch bei Punkt-Segmenten wie `/.//fremd.example` (`app/lib/auth.test.ts`, `tests/e2e/zugang.spec.ts`).
 - Actions sind auf Commit-SHA gepinnt, mit minimalen Rechten. CI läuft mit `pnpm audit` und einer OSV-Prüfung.
 - Die Claude-Review liest ihre Regeln vom Basis-Branch, nicht aus dem PR selbst.
 - Claude Code im Repo: deny-Regeln und Hooks in `.claude/settings.json` sperren die üblichen `.env`-Dateien (Lesen und Schreiben), generierte Migrationen und die Eval-Erwartungswerte. Bei Workflows, `skr03.ts`, den Eval-Vorlagen und den Leitplanken selbst fragen sie nach. Commits über 400 Zeilen und Commits, die eine committete Migration ändern, lehnen sie ab. Tests: `tests/hooks/`.
 
 ## Bekannte Grenzen
+
+- **Prompt Injection über PDF bleibt ein Restrisiko.** Ob ein Belegtext nach einer Anweisung klingt, erkennt eine Liste regulärer Ausdrücke (`app/lib/validator.ts`). Umformulierter Text kommt durch, ebenso versteckter, etwa weiße Schrift auf weißem Grund: Das Modell bekommt die Textebene des PDFs mit. Schlimmstenfalls folgen beide Agenten dem Text, und der Beleg wird automatisch auf ein plausibles, aber falsches Konto gebucht. Festschreiben verlangt nur, dass nichts mehr offen ist; eine automatische Buchung muss vorher kein Mensch gesehen haben.
+  Was den Schaden begrenzt: Konten und BU-Schlüssel sind ein Enum, Summen und Steuer rechnet Code nach, das Gegenkonto setzt Code, die App bezahlt nichts, und jede Buchung steht mit Begründung im Protokoll. Gegenmaßnahme, noch nicht gebaut: vor dem Festschreiben eine Stichprobe automatischer Buchungen vorlegen, zum Beispiel jede zehnte und alle von neuen Lieferanten, und erst nach dem Abhaken festschreiben.
 
 - Sitzungen sind zustandslos. Eine kopierte Session bleibt bis zu sieben Tage gültig, widerrufen lassen sich alle nur über ein neues Passwort.
 - Row Level Security in Postgres ist noch nicht umgesetzt. Die Trennung liegt in der Anwendung und in den Fremdschlüsseln.

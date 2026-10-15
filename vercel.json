@@ -1,6 +1,6 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "buildCommand": "pnpm db:migrate && pnpm db:seed && pnpm smoke:ai && pnpm build",
+  "buildCommand": "pnpm db:migrate && pnpm db:app-login && pnpm db:check-app-role && pnpm db:seed && pnpm smoke:ai && pnpm build",
   "regions": ["fra1"],
   "ignoreCommand": "[ \"$VERCEL_GIT_COMMIT_REF\" != \"main\" ]"
 }
