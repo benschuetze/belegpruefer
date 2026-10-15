@@ -26,10 +26,13 @@ const euro = (cents: number) => `${(cents / 100).toLocaleString("de-DE", { minim
 const lines = picked.map((c) => {
   const b = c.beleg;
   const items = b.lines.map((l) => `${l.description} (${l.taxRate} %, ${euro(l.netCents)} netto)`).join("; ");
+  // Missing mandatory fields often decide "pruefen"; without them in the list a reviewer cannot judge the case.
+  const missing = [!b.invoiceNumber && "Rechnungsnummer", !b.buyer?.name && "Empfänger"].filter(Boolean);
+  const gaps = missing.length ? ` **Ohne ${missing.join(" und ")}.**` : "";
   const expected = c.expected.lines
     .map((l) => `${l.satz} %: ${accountLabel(l.konto)}, BU ${l.bu || "leer"}`)
     .join(" · ");
-  return `- [ ] **${c.id}** ${c.tenantName} ← ${b.supplier.name} (${b.supplier.country ?? "DE"}): ${items}. Brutto ${euro(b.totals.grossCents)}.${b.notes.length ? ` Hinweise: ${b.notes.join(" / ")}.` : ""}\n  Erwartet: ${expected} → **${c.expected.outcome}**${c.expected.flexible ? " (automatisch mit richtigem Konto auch ok)" : ""}${c.note ? `\n  Notiz: ${c.note}` : ""}`;
+  return `- [ ] **${c.id}** ${c.tenantName} ← ${b.supplier.name} (${b.supplier.country ?? "DE"}): ${items}. Brutto ${euro(b.totals.grossCents)}.${gaps}${b.notes.length ? ` Hinweise: ${b.notes.join(" / ")}.` : ""}\n  Erwartet: ${expected} → **${c.expected.outcome}**${c.expected.flexible ? " (automatisch mit richtigem Konto auch ok)" : ""}${c.note ? `\n  Notiz: ${c.note}` : ""}`;
 });
 
 writeFileSync(
