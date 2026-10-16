@@ -105,7 +105,8 @@ describe("was guard-paths nicht sieht, fängt der Commit ab (Änderungen per Bas
       "rm -rf app/lib/ && git commit -am x",
       "rm -rf . && git commit -am x",
       'cd "$(git rev-parse --show-toplevel)" && echo p > .claude/settings.json && git commit -am x',
-      "(cd app && echo x > a.ts) && echo p > .claude/settings.json && git commit -am x",
+      // Without -a: only the subshell scoping makes this ask (a tracked write before -a would ask on its own).
+      "(cd app) && echo p > .claude/settings.json && git commit -m x",
       'echo p > "$F" && git commit -am x',
       `cd "$D" && rm -rf hooks; cd ${repo.root} && git commit -am x`,
     ]) {
@@ -123,6 +124,13 @@ describe("was guard-paths nicht sieht, fängt der Commit ab (Änderungen per Bas
       "python3 - <<'EOF'\nopen('.claude/hooks/x.mjs','w')\nEOF\ngit commit -am x",
       "cd - && rm -rf hooks && git commit -am x",
       "popd && rm -rf hooks && git commit -am x",
+      "rm -rf .claude/{hooks,settings.json} && git commit -am x",
+      "ln -s .claude/hooks h && echo p > h/g.mjs && git commit -m x",
+      "sh <<'EOF'\nrm -rf .claude\nEOF\ngit commit -m x",
+      "echo 'rm -rf .claude' | bash && git commit -m x",
+      "echo `rm -rf .claude`; git commit -m x",
+      "x=$(rm -rf .claude) && git commit -m x",
+      "cp -t .claude/hooks /etc/hosts && git commit -m x",
     ]) {
       expect(bash(command).decision, command).toBe("ask");
     }

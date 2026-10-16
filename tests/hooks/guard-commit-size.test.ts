@@ -160,6 +160,17 @@ describe("Commit-Größe: über 400 geänderte Zeilen wird der Commit abgelehnt"
     rmSync(dirname(link), { recursive: true, force: true });
   });
 
+  it("Stagen in einer Ersetzung, cd in sh -c, --pathspec-from-file und GIT_INDEX_FILE entgehen der Prüfung nicht", () => {
+    staged("app/a.ts", 600);
+    expect(bash("sh -c 'cd /' ; git commit -m x").decision).toBe("deny");
+    expect(bash("GIT_INDEX_FILE=.git/other git commit -m x").decision).toBe("ask");
+    expect(bash("GIT_AUTHOR_NAME=x git commit -m x").decision).toBe("deny");
+    repo.git("reset", "-q");
+    expect(bash('git commit -m "$(git add -A)"').decision).toBe("deny");
+    expect(bash(": $(git add -A) && git commit -m x").decision).toBe("deny");
+    expect(bash("git commit --pathspec-from-file=list.txt -m x").decision).toBe("ask");
+  });
+
   it("sudo, exec, timeout und abgekürzte Optionen ändern nichts an der Prüfung", () => {
     repo = makeRepo({ "app/a.ts": lines(300) });
     repo.write("app/b.ts", lines(300));
