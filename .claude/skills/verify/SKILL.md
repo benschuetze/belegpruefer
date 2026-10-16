@@ -51,6 +51,10 @@ description: Use for every code change before calling it done - writing the righ
   - Pfade in `git commit <pfad>` gelten relativ zum Verzeichnis des Commits, nicht zur Wurzel.
   - Ein git-Befehl vor dem Commit im selben Aufruf, der Index oder Arbeitsbaum ändert (`add`, `reset --soft`, `stash pop`, `checkout -- pfad`), macht jede Messung vorher wertlos: ablehnen.
   - Testbefehle aus dem Alltag gehören in die Tests (`2>&1 | tail`, Heredoc-Nachricht, `--amend --no-edit`): falsche Sperren sind genauso ein Fehler wie Lücken.
+  - Schreibziele nur aus bekannten Schreibern (`rm`, `cp`-Ziel, `sed -i`, `tee`, `git rm` …) und Ausgabe-Umleitungen: Leser (`cat`, `node skript.mjs pfad`), `< datei`, `<<< wort` und Werte von git-Optionen (`git -c k=v`) sind keine. Ordner, die Geschütztes enthalten (`rm -rf app`, `rm -rf .`), zählen wie die Datei; Schreiben nach dem letzten Commit zählt nicht.
+  - Abkürzungen langer Optionen so auflösen wie git (`--am`, `--mess x` nimmt `x` mit), ebenso Optionen der Wrapper mit Wert (`sudo --user ben`, `sudo -R dir`, `exec -a name`, `timeout 30`); ein `cd` in `( … )` gilt nur dort.
+  - Globs in Schreibzielen gegen das Dateisystem auflösen (`rm -rf .claude/*`); Interpreter mit Inline-Code, `-` oder ohne Skript (`python3 - <<EOF`, `perl -e`, `node --eval`) sind unbekannt; `cd -` und `popd` ebenso. Schreibt ein Befehl vor `git commit -a` oder `git commit <pfad>` getrackte Dateien, fragt der Hook.
+  - Das Commit-Verzeichnis zuerst auflösen (`realPath`), dann Repo bestimmen und `isProjectRepo` prüfen: Ein Symlink im Projekt kann in ein fremdes Repo zeigen, dessen clean-Filter git sonst ausführt.
   - Inhaltsprüfungen auf die ganze Datei nach der Änderung anwenden, nie nur auf den Ausschnitt eines Edits.
 - Blockiert ein Hook die eigene Arbeit: Meldung lesen und dem genannten Weg folgen, nie per Bash umgehen.
 
