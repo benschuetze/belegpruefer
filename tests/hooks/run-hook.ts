@@ -70,7 +70,8 @@ export function makeRepo(files: Record<string, string>) {
     root,
     write,
     git,
-    stage: (...paths: string[]) => git("add", "--", ...paths),
+    // -f: a global gitignore on the developer machine (e.g. **/.claude/settings.local.json) must not decide the test.
+    stage: (...paths: string[]) => git("add", "-f", "--", ...paths),
     remove: () => rmSync(root, { recursive: true, force: true }),
   };
 }
