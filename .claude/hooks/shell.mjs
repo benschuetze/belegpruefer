@@ -1,5 +1,6 @@
 // Reads `git commit` out of a shell command the way the shell would split it. Pure apart from findRepoRoot, so the
 // parsing is unit-tested on its own (tests/hooks/shell.test.ts) and the hook only does the git side.
+import { existsSync } from "node:fs";
 import { basename, isAbsolute, resolve } from "node:path";
 import { findRepoRoot } from "./lib.mjs";
 
@@ -13,7 +14,13 @@ const VALUE_SHORT = "mFCct";
 const READ_ONLY_GIT = new Set(["status", "diff", "log", "show", "rev-parse", "ls-files", "describe", "blame", "grep", "shortlog", "fetch", "remote", "branch", "tag", "config", "worktree"]);
 /** Words that run the next word as the program. */
 // biome-ignore format: a word list reads better on one line
-const PREFIXES = new Set(["command", "env", "time", "exec", "nohup", "nice", "then", "do", "else", "elif", "if", "while", "until", "!", "{"]);
+const PREFIXES = new Set(["command", "env", "time", "exec", "nohup", "nice", "sudo", "then", "do", "else", "elif", "if", "while", "until", "!", "{"]);
+/** Options of the wrappers that take the next word as their value (`sudo -u ben`, `env -u FOO`, `nice -n 5`). */
+const PREFIX_VALUES = {
+  sudo: new Set(["-u", "-g", "-h", "-p", "-C", "-D", "-U", "-r", "-t"]),
+  env: new Set(["-u", "-C", "-S"]),
+  nice: new Set(["-n"]),
+};
 
 /**
  * Every `git commit` in a shell command, with the directory it runs in (`cd`, `git -C`, null when it comes from a
@@ -26,9 +33,10 @@ export function findCommits(text, base, state = { dir: base, changedBy: null }) 
     const plain = words.map((w) => w.text);
     let i = 0;
     while (i < plain.length && (/^[A-Za-z_][A-Za-z0-9_]*=/.test(plain[i] ?? "") || PREFIXES.has(plain[i] ?? ""))) {
+      const values = PREFIX_VALUES[plain[i] ?? ""] ?? new Set();
       i++;
-      // `env -i`, `nice -n 5`: options of the wrapper, not the program.
-      while (plain[i - 1] !== "{" && plain[i]?.startsWith("-")) i += /^-[nu]$/.test(plain[i] ?? "") ? 2 : 1;
+      // `env -i`, `nice -n 5`, `sudo -u ben`: options of the wrapper, not the program.
+      while (plain[i - 1] !== "{" && plain[i]?.startsWith("-")) i += values.has(plain[i] ?? "") ? 2 : 1;
     }
     const program = basename(plain[i] ?? "").replace(/\.exe$/i, "");
     if (["sh", "bash", "zsh"].includes(program)) {
@@ -83,8 +91,9 @@ function parseCommitArgs(args) {
     }
     if (a.startsWith("--")) {
       if (a === "--all") out.all = true;
-      else if (a === "--amend") out.amend = true;
-      else if (a === "--include") out.include = true;
+      // git takes unique prefixes of long options: `--amen`, `--inc`. (`--al` is ambiguous with --allow-empty.)
+      else if (a.length >= 5 && "--amend".startsWith(a)) out.amend = true;
+      else if (a.length >= 5 && "--include".startsWith(a)) out.include = true;
       else if (VALUE_LONG.test(a)) i++;
       continue;
     }
@@ -109,7 +118,7 @@ function parseCommitArgs(args) {
  * Splits a shell command into simple commands of words, honouring quotes and $( ) so a commit message or a quoted
  * path stays one word. Words built from $, ` or ~ are marked dynamic: their value is only known to the shell.
  */
-function splitCommands(text) {
+function splitCommands(text, keepTargets = false) {
   const commands = [];
   let words = [];
   let word = null;
@@ -118,8 +127,10 @@ function splitCommands(text) {
   let skipNext = null;
   const heredocs = [];
   const finishWord = () => {
-    if (word && skipNext === "target") skipNext = null;
-    else if (word && skipNext === "heredoc") {
+    if (word && skipNext === "target") {
+      skipNext = null;
+      if (keepTargets) words.push({ ...word, target: true });
+    } else if (word && skipNext === "heredoc") {
       heredocs.push(word.text);
       skipNext = null;
     } else if (word) words.push(word);
@@ -213,4 +224,55 @@ function splitCommands(text) {
   }
   finishCommand();
   return commands;
+}
+
+/** Programs that only read their arguments; what they name is not written. Their redirection targets still are. */
+// biome-ignore format: a word list reads better on one line
+const READ_ONLY_PROGRAMS = new Set(["cat", "less", "more", "head", "tail", "grep", "rg", "diff", "wc", "ls", "stat", "file", "echo", "printf", "pwd", "test", "["]);
+
+/**
+ * Absolute paths that commands in the shell command may write: arguments of programs that are not read-only
+ * (`sed -i`, `cp`, `rm`, `find -delete`, `git rm`/`mv`/`checkout`), and every redirection target. Arguments of
+ * `git commit` and of read-only git subcommands do not count, so a message that names a file asks nothing. Words
+ * resolve against the directory of their own command, following `cd`; a word only counts if it contains a `/` or
+ * names an existing path, so ordinary words do not land in a protected folder by accident. Dynamic words
+ * (variables, substitutions) are unknown and skipped.
+ */
+export function writtenPaths(text, base) {
+  const out = [];
+  let dir = base;
+  for (const words of splitCommands(text, true)) {
+    const plain = words.map((w) => w.text);
+    let i = 0;
+    while (i < plain.length && (/^[A-Za-z_][A-Za-z0-9_]*=/.test(plain[i] ?? "") || PREFIXES.has(plain[i] ?? ""))) {
+      const values = PREFIX_VALUES[plain[i] ?? ""] ?? new Set();
+      i++;
+      while (plain[i - 1] !== "{" && plain[i]?.startsWith("-")) i += values.has(plain[i] ?? "") ? 2 : 1;
+    }
+    const program = basename(plain[i] ?? "");
+    if (["sh", "bash", "zsh"].includes(program)) {
+      const at = plain.findIndex((w, k) => k > i && /^-[a-z]*c[a-z]*$/.test(w));
+      if (at !== -1 && plain[at + 1]) out.push(...writtenPaths(plain[at + 1], dir ?? base));
+      continue;
+    }
+    if (program === "cd") {
+      const target = words[i + 1];
+      dir = !target || target.dynamic ? null : dir && resolve(dir, target.text);
+      continue;
+    }
+    let readOnly = READ_ONLY_PROGRAMS.has(program);
+    let args = words.slice(i + 1);
+    if (program === "git") {
+      const sub = args.findIndex((w) => !w.text.startsWith("-"));
+      readOnly = sub === -1 || READ_ONLY_GIT.has(args[sub]?.text ?? "") || args[sub]?.text === "commit";
+      args = args.slice(sub + 1);
+    }
+    for (const word of args) {
+      if (!dir || word.dynamic || word.text === "" || (readOnly && !word.target)) continue;
+      if (!word.target && word.text.startsWith("-")) continue;
+      const path = resolve(dir, word.text);
+      if (word.text.includes("/") || existsSync(path)) out.push(path);
+    }
+  }
+  return out;
 }

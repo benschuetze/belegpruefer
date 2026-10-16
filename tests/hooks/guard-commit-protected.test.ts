@@ -55,6 +55,31 @@ describe("was guard-paths nicht sieht, fängt der Commit ab (Änderungen per Bas
     repo = makeRepo({});
   });
 
+  it("Bash schreibt im selben Aufruf auf einen geschützten Pfad: Rückfrage, denn vorher zeigt der Diff nichts", () => {
+    repo = makeRepo({ ".claude/hooks/guard-paths.mjs": "x\n", "drizzle/0000_init.sql": "x\n", "app/a.ts": "a\n" });
+    for (const command of [
+      "echo p > .claude/hooks/guard-paths.mjs && git commit -am x",
+      "sed -i '' 's/x/y/' drizzle/0000_init.sql && git commit -am x",
+      "rm -rf .claude && git commit -am x",
+      "cd .claude && echo p > hooks/guard-paths.mjs && cd .. && git commit -am x",
+      "cp /tmp/x .github/workflows/ && git commit -am x",
+    ]) {
+      expect(bash(command).decision, command).toBe("ask");
+    }
+  });
+
+  it("nur Lesen oder Erwähnen eines geschützten Pfads fragt nicht", () => {
+    repo = makeRepo({ ".claude/settings.json": "{}\n", "app/a.ts": "a\n" });
+    repo.write("app/a.ts", "b\n");
+    for (const command of [
+      "cat .claude/settings.json; git commit -am x",
+      "git diff .github/workflows/ci.yml; git commit -am x",
+      'git commit -am "fix: siehe .claude/settings.json"',
+    ]) {
+      expect(bash(command).decision, command).toBeUndefined();
+    }
+  });
+
   it("geänderter Code in skr03.ts fragt nach, ein geänderter Kommentar nicht", () => {
     repo = makeRepo({ "app/lib/skr03.ts": '// Konten\nexport const A = "4930";\n' });
     repo.write("app/lib/skr03.ts", '// Konten, Stand Oktober\nexport const A = "4930";\n');

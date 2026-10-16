@@ -24,6 +24,8 @@ describe("findCommits: jeder git commit im Befehl wird gefunden", () => {
     "time git commit -m x",
     "{ git commit -m x; }",
     "if true; then git commit -m x; fi",
+    "sudo git commit -m x",
+    "sudo -u ben git commit -m x",
   ])("%s", (command) => {
     expect(one(command)).toMatchObject({ dir: BASE, stagesFirst: null, paths: [] });
   });
@@ -63,6 +65,9 @@ describe("findCommits: Optionen, Pfade und was keine Pfade sind", () => {
     expect(one("git commit -am x")).toMatchObject({ all: true, paths: [] });
     expect(one("git commit --all -m x")).toMatchObject({ all: true });
     expect(one("git commit --amend --no-edit")).toMatchObject({ amend: true, paths: [] });
+    // git nimmt eindeutige Abkürzungen langer Optionen an.
+    expect(one("git commit --amen --no-edit")).toMatchObject({ amend: true, paths: [] });
+    expect(one("git commit --inc a.ts")).toMatchObject({ include: true, paths: ["a.ts"] });
     expect(one("git commit a.ts b.ts -m x")).toMatchObject({ paths: ["a.ts", "b.ts"] });
     expect(one("git commit -i a.ts -m x")).toMatchObject({ include: true, paths: ["a.ts"] });
     expect(one("git commit -m x -- a.ts")).toMatchObject({ paths: ["a.ts"] });

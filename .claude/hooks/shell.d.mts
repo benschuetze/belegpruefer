@@ -10,3 +10,6 @@ export type Commit = {
 };
 
 export function findCommits(text: string, base: string): Commit[];
+
+/** Absolute paths that commands in the shell command may write (redirection targets included). */
+export function writtenPaths(text: string, base: string): string[];

@@ -98,7 +98,7 @@ Gilt per Hook (`.claude/settings.json`, `.claude/hooks/`), nicht nur als Bitte. 
 | `.claude/settings*.json`, `.claude/hooks/` | Rückfrage | die Leitplanken selbst |
 | `.env*` außer `.env.example` | Lesen und Schreiben gesperrt | Werte setzt Ben |
 
-Commits über 400 geänderte Zeilen (ohne Lockfile, `drizzle/`, Eval-Daten) lehnt ein Hook ab: aufteilen. Stagen und Committen in getrennten Aufrufen, sonst lässt sich die Größe nicht messen. Begründung der Schwelle in `.claude/hooks/guard-commit-size.mjs`.
+Commits über 400 geänderte Zeilen (ohne Lockfile, `drizzle/`, Eval-Daten) lehnt ein Hook ab: aufteilen. Stagen und Committen in getrennten Aufrufen, sonst lässt sich die Größe nicht messen. Schreibt ein Shell-Befehl im selben Aufruf auf Leitplanken, Workflows, Eval-Vorlagen, `skr03.ts` oder eine Migration, fragt der Hook nach: Diese Änderung sieht er vor dem Commit noch nicht. Begründung der Schwelle in `.claude/hooks/guard-commit-size.mjs`.
 
 ## Skills und Agenten
 

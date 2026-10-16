@@ -13,9 +13,9 @@
 // environment of the Claude Code process, which a prefix on the Bash command does not reach, and settings files that
 // could set it are guarded by guard-paths.mjs.
 import { readFileSync } from "node:fs";
-import { join } from "node:path";
+import { join, relative, sep } from "node:path";
 import { decide, findRepoRoot, git, isProjectRepo, note, readInput, SKR03_PATH, skr03Code } from "./lib.mjs";
-import { findCommits } from "./shell.mjs";
+import { findCommits, writtenPaths } from "./shell.mjs";
 
 const fromEnv = Number(process.env.BELEGPRUEFER_MAX_COMMIT_LINES);
 const LIMIT = Number.isInteger(fromEnv) && fromEnv > 0 ? fromEnv : 400;
@@ -40,13 +40,19 @@ const GUARDED = [
   /^\.claude\/settings(\.local)?\.json$/,
 ];
 
+/** Folders that hold guarded files: removing or overwriting one removes what is inside. */
+const GUARDED_DIRS = new Set([".claude", ".claude/hooks", ".github", ".github/workflows", "drizzle", "evals"]);
+
 const input = await readInput();
 const command = input?.tool_input?.command;
 if (typeof command !== "string") process.exit(0);
 
 try {
-  const commits = findCommits(command, typeof input.cwd === "string" ? input.cwd : process.cwd());
-  const verdicts = commits.map(check).filter(Boolean);
+  const cwd = typeof input.cwd === "string" ? input.cwd : process.cwd();
+  const commits = findCommits(command, cwd);
+  // What Bash writes in the same call is not in any diff yet, because the hook runs first.
+  const written = commits.length > 0 ? writtenPaths(command, cwd) : [];
+  const verdicts = commits.map((commit) => check(commit, written)).filter(Boolean);
   const denied = verdicts.find((v) => v.decision === "deny");
   const asked = verdicts.find((v) => v.decision === "ask");
   if (denied) decide("deny", denied.reason);
@@ -56,7 +62,7 @@ try {
   note("Commit-Hook konnte den Befehl nicht prüfen (interner Fehler); Größe und geschützte Pfade sind ungeprüft.");
 }
 
-function check(commit) {
+function check(commit, written) {
   if (commit.stagesFirst) {
     return {
       decision: "deny",
@@ -124,6 +130,25 @@ function check(commit) {
     return {
       decision: "ask",
       reason: `Der Commit ändert ${guarded}, einen Pfad aus „Nicht ohne Rückfrage ändern“ bzw. die Leitplanken selbst (CLAUDE.md). Frag Ben, falls er diese Änderung nicht schon freigegeben hat.`,
+    };
+  }
+
+  const named = written
+    .map((p) => relative(root, p).split(sep).join("/"))
+    .find((rel) => {
+      const lower = rel.toLowerCase();
+      if (rel.startsWith("..")) return false;
+      return (
+        GUARDED_DIRS.has(lower) ||
+        GUARDED.some((re) => re.test(lower)) ||
+        /^drizzle\/[^/]+\.sql$/.test(lower) ||
+        lower === SKR03_PATH
+      );
+    });
+  if (named) {
+    return {
+      decision: "ask",
+      reason: `Im selben Aufruf schreibt ein Shell-Befehl auf ${named} (Leitplanken, „Nicht ohne Rückfrage ändern“ oder eine Migration). Der Hook sieht diese Änderung vor dem Commit nicht. Erst ändern, dann in einem eigenen Aufruf committen, oder Ben fragen.`,
     };
   }
 
