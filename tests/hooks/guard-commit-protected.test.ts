@@ -126,6 +126,9 @@ describe("was guard-paths nicht sieht, fängt der Commit ab (Änderungen per Bas
     ]) {
       expect(bash(command).decision, command).toBe("ask");
     }
+    // Options only and glob words that are no valid pattern: no question, no crash.
+    expect(bash("node --version && git commit -m x").decision).toBeUndefined();
+    expect(bash('echo y > "a[1" && git commit -m x').decision).toBeUndefined();
     repo.write("notes.log", "x\n");
     expect(bash("rm -f *.log && git commit -m x").decision).toBeUndefined();
   });

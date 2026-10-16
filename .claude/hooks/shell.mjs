@@ -332,7 +332,7 @@ function writes(words) {
   // anything. A named script is not seen.
   if (INTERPRETERS.has(program)) {
     const inline = texts.some((a) => /^-[a-zA-Z]*[cepE]$/.test(a) || /^--(eval|print|command)\b/.test(a));
-    if (inline || texts.includes("-") || plainArgs(args).length === 0) return "unknown";
+    if (inline || texts.includes("-") || args.length === 0) return "unknown";
   }
   if (program === "git") {
     let k = 0;
@@ -370,7 +370,13 @@ function expandGlob(path) {
       .replace(/\[!/g, "[^")
       .replace(/\*/g, ".*")
       .replace(/\?/g, ".");
-    const re = new RegExp(`^${pattern}$`);
+    let re;
+    try {
+      re = new RegExp(`^${pattern}$`);
+    } catch {
+      // Not a valid pattern (`a[1`, `[z-a]`): the shell keeps such a word as it is.
+      return [path];
+    }
     const next = [];
     for (const base of found) {
       let names = [];
