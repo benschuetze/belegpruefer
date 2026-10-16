@@ -1,4 +1,6 @@
-import { join } from "node:path";
+import { mkdtempSync, rmSync, symlinkSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { lines, makeRepo, runHook } from "./run-hook";
 
@@ -148,5 +150,13 @@ describe("Commit-Größe: über 400 geänderte Zeilen wird der Commit abgelehnt"
     expect(bash("BELEGPRUEFER_MAX_COMMIT_LINES=9999 git commit -m x").decision).toBe("deny");
     expect(bash("git commit -m x", repo.root, { BELEGPRUEFER_MAX_COMMIT_LINES: "1000" }).decision).toBeUndefined();
     expect(bash("git commit -m x", repo.root, { BELEGPRUEFER_MAX_COMMIT_LINES: "-1" }).decision).toBe("deny");
+  });
+
+  it("über einen Symlink erreicht bleibt es das eigene Repository und wird geprüft", () => {
+    staged("app/a.ts", 600);
+    const link = join(mkdtempSync(join(tmpdir(), "link-")), "repo");
+    symlinkSync(repo.root, link);
+    expect(bash("git commit -m x", link).decision).toBe("deny");
+    rmSync(dirname(link), { recursive: true, force: true });
   });
 });

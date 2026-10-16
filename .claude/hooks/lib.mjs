@@ -72,7 +72,8 @@ export function isProjectRepo(root) {
   const project = process.env.CLAUDE_PROJECT_DIR;
   if (!project) return true;
   const projectRoot = realPath(project);
-  if (root === projectRoot) return true;
+  // Both sides resolved: reached through a symlink (/tmp -> /private/tmp, a linked checkout) the repo is still this one.
+  if (realPath(root) === projectRoot) return true;
   try {
     const gitdir = /^gitdir:\s*(.+)$/m.exec(readFileSync(join(root, ".git"), "utf8"))?.[1]?.trim();
     return !!gitdir && realPath(resolve(root, gitdir)).startsWith(join(projectRoot, ".git", "worktrees") + sep);
