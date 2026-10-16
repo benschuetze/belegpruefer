@@ -95,12 +95,6 @@ function check(commit, written) {
   const root = findRepoRoot(dir);
   if (!root) return null;
   if (!isProjectRepo(root)) return null;
-  if (commit.gitEnv || commit.pathspecFile) {
-    return {
-      decision: "ask",
-      reason: `${commit.gitEnv ?? "--pathspec-from-file"} lenkt den Commit auf einen Index oder Pfade, die der Hook nicht misst. Ben fragen oder ohne diesen Zusatz committen.`,
-    };
-  }
 
   let base = "HEAD";
   try {

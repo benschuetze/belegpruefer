@@ -6,10 +6,6 @@ export type Commit = {
   all: boolean;
   amend: boolean;
   include: boolean;
-  /** `--pathspec-from-file`: the paths are in a file the hook does not read. */
-  pathspecFile: boolean;
-  /** A GIT_INDEX_FILE, GIT_DIR or similar prefix that points git elsewhere; null if none. */
-  gitEnv: string | null;
   paths: string[];
 };
 

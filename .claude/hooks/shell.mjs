@@ -82,45 +82,6 @@ function cdTarget(dir, target) {
   return dir ? resolve(dir, target.text) : null;
 }
 
-/** The command text inside each `$( )` and backtick substitution of a word, outermost first. */
-function substitutions(text) {
-  const out = [];
-  for (let i = 0; i < text.length; i++) {
-    if (text[i] === "$" && text[i + 1] === "(") {
-      let depth = 0;
-      let j = i + 1;
-      for (; j < text.length; j++) {
-        if (text[j] === "(") depth++;
-        else if (text[j] === ")" && --depth === 0) break;
-      }
-      out.push(text.slice(i + 2, j));
-      i = j;
-    } else if (text[i] === "`") {
-      const end = text.indexOf("`", i + 1);
-      if (end === -1) break;
-      out.push(text.slice(i + 1, end));
-      i = end;
-    }
-  }
-  return out;
-}
-
-/** `a/{b,c}` -> `a/b`, `a/c`, as the shell expands braces before anything else. */
-function expandBraces(text, limit = 1000) {
-  const m = /\{([^{}]*,[^{}]*)\}/.exec(text);
-  if (!m) return [text];
-  const out = [];
-  for (const part of m[1].split(",")) {
-    out.push(...expandBraces(text.slice(0, m.index) + part + text.slice(m.index + m[0].length), limit));
-    if (out.length >= limit) break;
-  }
-  return out.slice(0, limit);
-}
-
-/** Environment variables that point git at another index, repository or config: the measurement would miss it. */
-const GIT_REDIRECT_ENV =
-  /^GIT_(INDEX_FILE|DIR|WORK_TREE|COMMON_DIR|OBJECT_DIRECTORY|ALTERNATE_OBJECT_DIRECTORIES|NAMESPACE|CONFIG\w*)=/;
-
 /**
  * Every `git commit` in a shell command, with the directory it runs in (`cd`, `git -C`, null when it comes from a
  * variable), its options, and the first earlier git command that changes what gets committed. Best effort: merge,
@@ -134,30 +95,11 @@ export function findCommits(text, base, state = { dir: base, changedBy: null, st
     if (words.group === "close" && state.stack.length > 0) state.dir = state.stack.pop() ?? null;
     if (words.group) continue;
     const plain = words.map((w) => w.text);
-    // Substitutions run before the command that uses them (`git commit -m "$(git add -A)"`), in a child shell.
-    for (const word of words) {
-      if (!word.dynamic) continue;
-      for (const inner of substitutions(word.text)) {
-        const child = { dir: state.dir, changedBy: state.changedBy, stack: [] };
-        found.push(...findCommits(inner, base, child));
-        state.changedBy = child.changedBy;
-      }
-    }
     let i = programIndex(plain);
     const program = basename(plain[i] ?? "").replace(/\.exe$/i, "");
-    const gitEnv =
-      plain
-        .slice(0, i)
-        .find((w) => GIT_REDIRECT_ENV.test(w))
-        ?.split("=")[0] ?? null;
     if (["sh", "bash", "zsh"].includes(program)) {
       const at = plain.findIndex((w, k) => k > i && /^-[a-z]*c[a-z]*$/.test(w));
-      if (at !== -1 && plain[at + 1]) {
-        // A child shell: its `cd` does not reach the commands after it, what it stages does.
-        const child = { dir: state.dir, changedBy: state.changedBy, stack: [] };
-        found.push(...findCommits(plain[at + 1], base, child));
-        state.changedBy = child.changedBy;
-      }
+      if (at !== -1 && plain[at + 1]) found.push(...findCommits(plain[at + 1], base, state));
       continue;
     }
     if (program === "cd" || program === "pushd") {
@@ -189,13 +131,13 @@ export function findCommits(text, base, state = { dir: base, changedBy: null, st
       if (sub && !READ_ONLY_GIT.has(sub)) state.changedBy ??= sub;
       continue;
     }
-    found.push({ dir: at, stagesFirst: state.changedBy, gitEnv, ...parseCommitArgs(plain.slice(i + 1)) });
+    found.push({ dir: at, stagesFirst: state.changedBy, ...parseCommitArgs(plain.slice(i + 1)) });
   }
   return found;
 }
 
 function parseCommitArgs(args) {
-  const out = { all: false, amend: false, include: false, pathspecFile: false, paths: [] };
+  const out = { all: false, amend: false, include: false, paths: [] };
   for (let i = 0; i < args.length; i++) {
     const a = args[i] ?? "";
     if (a === "--") {
@@ -208,7 +150,6 @@ function parseCommitArgs(args) {
       if (key === "--all") out.all = true;
       else if (key === "--amend") out.amend = true;
       else if (key === "--include") out.include = true;
-      else if (key === "--pathspec-from-file") out.pathspecFile = true;
       if (key && VALUE_LONG.has(key) && eq === -1) i++;
       continue;
     }
@@ -301,12 +242,6 @@ function splitCommands(text, keepTargets = false) {
       }
       append(s, dynamic);
       i = j;
-    } else if (c === "`") {
-      // A backtick substitution is one word, spaces included, like `$( )`.
-      const end = text.indexOf("`", i + 1);
-      const stop = end === -1 ? text.length : end + 1;
-      append(text.slice(i, stop), true);
-      i = stop - 1;
     } else if (c === "$" && text[i + 1] === "(") {
       const end = substitution(i + 1);
       append(text.slice(i, end), true);
@@ -372,16 +307,7 @@ function writes(words) {
   const texts = args.map((w) => w.text);
   if (WRITES_ALL.has(program)) return plainArgs(args);
   if (WRITES_AFTER_FIRST.has(program)) return plainArgs(args).slice(1);
-  // A link made now can lead a later write anywhere, and it does not exist yet to be resolved.
-  if (program === "ln") return "unknown";
-  if (WRITES_LAST.has(program)) {
-    // `cp -t dir src…`, `install --target-directory=dir`: the target comes first.
-    const t = texts.findIndex((a) => a === "-t" || a === "--target-directory");
-    if (t !== -1) return args.slice(t + 1, t + 2);
-    const long = args.find((w) => w.text.startsWith("--target-directory="));
-    if (long) return [{ ...long, text: long.text.slice("--target-directory=".length) }];
-    return plainArgs(args).slice(-1);
-  }
+  if (WRITES_LAST.has(program)) return plainArgs(args).slice(-1);
   if (program === "dd")
     return args.filter((w) => w.text.startsWith("of=")).map((w) => ({ ...w, text: w.text.slice(3) }));
   const inPlace = texts.some((a) => /^-[a-zA-Z]*i/.test(a) || a.startsWith("--in-place"));
@@ -469,10 +395,6 @@ function steps(text, state, out) {
     if (words.group === "close" && state.stack.length > 0) state.dir = state.stack.pop() ?? null;
     if (words.group) continue;
     const plain = words.map((w) => w.text);
-    // Substitutions run first, in a child shell (`x=$(rm -rf .claude)`, `echo \`…\``).
-    for (const word of words) {
-      if (word.dynamic) for (const inner of substitutions(word.text)) steps(inner, { dir: state.dir, stack: [] }, out);
-    }
     const i = programIndex(plain);
     const program = basename(plain[i] ?? "");
     if (["sh", "bash", "zsh"].includes(program)) {
@@ -483,9 +405,6 @@ function steps(text, state, out) {
         const dir = state.dir;
         steps(script, { dir, stack: [] }, out);
         state.dir = dir;
-      } else if (!plain.slice(i + 1).some((w) => !w.startsWith("-"))) {
-        // Reads its script from stdin (`sh <<EOF`, `… | bash`): may write anything.
-        out.push({ words: words.slice(i), targets: [], dir: state.dir, commit: false, opaque: true });
       }
       continue;
     }
@@ -525,8 +444,8 @@ export function writtenPaths(text, base) {
   const last = all.findLastIndex((s) => s.commit);
   const paths = [];
   let unknown = null;
-  for (const { words, targets, dir, opaque } of all.slice(0, Math.max(last, 0))) {
-    const named = opaque ? "unknown" : writes(words);
+  for (const { words, targets, dir } of all.slice(0, Math.max(last, 0))) {
+    const named = writes(words);
     if (named === "unknown") {
       unknown ??= words
         .slice(0, 2)
@@ -541,7 +460,7 @@ export function writtenPaths(text, base) {
         unknown ??= word.text;
         continue;
       }
-      for (const text of expandBraces(word.text)) paths.push(...expandGlob(resolve(dir, text)));
+      paths.push(...expandGlob(resolve(dir, word.text)));
     }
   }
   return { paths, unknown };
