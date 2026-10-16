@@ -1,7 +1,7 @@
 // Reads `git commit` out of a shell command the way the shell would split it. Pure apart from findRepoRoot, so the
 // parsing is unit-tested on its own (tests/hooks/shell.test.ts) and the hook only does the git side.
-import { existsSync } from "node:fs";
-import { basename, isAbsolute, resolve } from "node:path";
+import { existsSync, readdirSync } from "node:fs";
+import { basename, isAbsolute, join, parse, resolve, sep } from "node:path";
 import { findRepoRoot } from "./lib.mjs";
 
 /** Long options of `git commit`; git accepts any unique prefix of them (`--amen`, `--mess x`). */
@@ -75,6 +75,8 @@ function programIndex(plain) {
  */
 function cdTarget(dir, target) {
   if (target?.text === "$(git rev-parse --show-toplevel)") return dir && findRepoRoot(dir);
+  // `cd -` goes back to a directory this parser does not track.
+  if (target?.text === "-") return null;
   if (!target || target.dynamic) return null;
   if (isAbsolute(target.text)) return target.text;
   return dir ? resolve(dir, target.text) : null;
@@ -100,8 +102,12 @@ export function findCommits(text, base, state = { dir: base, changedBy: null, st
       if (at !== -1 && plain[at + 1]) found.push(...findCommits(plain[at + 1], base, state));
       continue;
     }
-    if (program === "cd") {
+    if (program === "cd" || program === "pushd") {
       state.dir = cdTarget(state.dir, words[i + 1]);
+      continue;
+    }
+    if (program === "popd") {
+      state.dir = null;
       continue;
     }
     if (program !== "git") continue;
@@ -304,7 +310,8 @@ function writes(words) {
   if (WRITES_LAST.has(program)) return plainArgs(args).slice(-1);
   if (program === "dd")
     return args.filter((w) => w.text.startsWith("of=")).map((w) => ({ ...w, text: w.text.slice(3) }));
-  if (program === "sed" || program === "perl") {
+  const inPlace = texts.some((a) => /^-[a-zA-Z]*i/.test(a) || a.startsWith("--in-place"));
+  if (program === "sed" || (program === "perl" && inPlace)) {
     if (!texts.some((a) => /^-[a-zA-Z]*i/.test(a) || a.startsWith("--in-place"))) {
       return program === "perl" && texts.some((a) => /^-[a-zA-Z]*e$/.test(a)) ? "unknown" : [];
     }
@@ -321,7 +328,12 @@ function writes(words) {
     return roots;
   }
   if (program === "patch" || program === "unzip" || program === "tar") return "unknown";
-  if (INTERPRETERS.has(program) && texts.some((a) => /^-[a-zA-Z]*[ce]$/.test(a))) return "unknown";
+  // Inline code (`-c`, `-e`, `--eval`) or a script read from stdin (`python3 - <<EOF`, no script at all) may write
+  // anything. A named script is not seen.
+  if (INTERPRETERS.has(program)) {
+    const inline = texts.some((a) => /^-[a-zA-Z]*[cepE]$/.test(a) || /^--(eval|print|command)\b/.test(a));
+    if (inline || texts.includes("-") || plainArgs(args).length === 0) return "unknown";
+  }
   if (program === "git") {
     let k = 0;
     while (k < texts.length && texts[k]?.startsWith("-")) k += GIT_VALUE_OPTIONS.has(texts[k] ?? "") ? 2 : 1;
@@ -339,6 +351,41 @@ function writes(words) {
     return GIT_WRITES_TREE.has(sub) ? "unknown" : [];
   }
   return [];
+}
+
+/**
+ * The files an unquoted glob in a written path matches now, the way the shell expands it (`*` and `?` do not match
+ * a leading dot). No match: the shell passes the word on literally, so it is returned as it is.
+ */
+function expandGlob(path) {
+  if (!/[*?[]/.test(path)) return [path];
+  let found = [parse(path).root];
+  for (const part of path.split(sep).filter(Boolean)) {
+    if (!/[*?[]/.test(part)) {
+      found = found.map((base) => join(base, part));
+      continue;
+    }
+    const pattern = part
+      .replace(/[.+^${}()|\\]/g, "\\$&")
+      .replace(/\[!/g, "[^")
+      .replace(/\*/g, ".*")
+      .replace(/\?/g, ".");
+    const re = new RegExp(`^${pattern}$`);
+    const next = [];
+    for (const base of found) {
+      let names = [];
+      try {
+        names = readdirSync(base);
+      } catch {
+        // Not a directory: nothing below it matches.
+      }
+      for (const name of names) {
+        if (re.test(name) && (part.startsWith(".") || !name.startsWith("."))) next.push(join(base, name));
+      }
+    }
+    found = next.slice(0, 1000);
+  }
+  return found.length > 0 ? found : [path];
 }
 
 /** Simple commands of the shell command with the directory each runs in, `sh -c` and subshells included. */
@@ -361,8 +408,12 @@ function steps(text, state, out) {
       }
       continue;
     }
-    if (program === "cd") {
+    if (program === "cd" || program === "pushd") {
       state.dir = cdTarget(state.dir, words[i + 1]);
+      continue;
+    }
+    if (program === "popd") {
+      state.dir = null;
       continue;
     }
     let k = i + 1;
@@ -409,7 +460,7 @@ export function writtenPaths(text, base) {
         unknown ??= word.text;
         continue;
       }
-      paths.push(resolve(dir, word.text));
+      paths.push(...expandGlob(resolve(dir, word.text)));
     }
   }
   return { paths, unknown };

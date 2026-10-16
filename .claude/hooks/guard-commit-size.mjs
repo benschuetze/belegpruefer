@@ -167,6 +167,20 @@ function check(commit, written) {
       reason: `Im selben Aufruf schreibt ein Shell-Befehl auf ${named || "."} (Leitplanken, „Nicht ohne Rückfrage ändern“ oder eine Migration, auch als Ordner darüber). Der Hook sieht diese Änderung vor dem Commit nicht. Erst ändern, dann in einem eigenen Aufruf committen, oder Ben fragen.`,
     };
   }
+  // `-a` and `git commit <paths>` take tracked files from the working tree, where those writes land: their size is
+  // not visible before the command runs.
+  if (commit.all || commit.paths.length > 0) {
+    const inside = written.paths
+      .map((p) => relative(root, realPath(p)).split(sep).join("/"))
+      .filter((rel) => rel !== "" && !rel.startsWith("..") && !isAbsolute(rel));
+    const tracked = inside.length > 0 ? trackedAmong(root, inside) : [];
+    if (tracked.length > 0) {
+      return {
+        decision: "ask",
+        reason: `Im selben Aufruf schreibt ein Shell-Befehl vor dem Commit auf ${tracked.slice(0, 3).join(", ")}; was das zum Commit beiträgt, sieht der Hook vorher nicht. Erst in einem eigenen Aufruf ausführen, dann committen.`,
+      };
+    }
+  }
   if (written.unknown) {
     return {
       decision: "ask",
@@ -262,6 +276,18 @@ function parseNameStatus(text) {
     }
   }
   return map;
+}
+
+/** The paths (files or folders) among `rels` that hold tracked files; all of them if git cannot tell. */
+function trackedAmong(root, rels) {
+  try {
+    const files = git(root, ["ls-files", "-z", "--", ...rels])
+      .split("\0")
+      .filter(Boolean);
+    return rels.filter((rel) => files.some((f) => f === rel || f.startsWith(`${rel}/`)));
+  } catch {
+    return rels;
+  }
 }
 
 function show(root, spec) {

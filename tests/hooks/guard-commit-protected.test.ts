@@ -113,6 +113,31 @@ describe("was guard-paths nicht sieht, fängt der Commit ab (Änderungen per Bas
     }
   });
 
+  it("Globs, Inline-Code von Interpretern, cd - und popd: Rückfrage", () => {
+    repo = makeRepo({ ".claude/settings.json": "{}\n", ".claude/hooks/guard-paths.mjs": "x\n", "app/a.ts": "a\n" });
+    for (const command of [
+      "rm -rf .claude/* && git commit -am x",
+      "sed -i '' 's/a/b/' .claude/settings*.json && git commit -am x",
+      "perl -e 'open F,\">.claude/hooks/x.mjs\"' && git commit -am x",
+      'node --eval \'require("fs").writeFileSync(".claude/hooks/x.mjs","")\' && git commit -am x',
+      "python3 - <<'EOF'\nopen('.claude/hooks/x.mjs','w')\nEOF\ngit commit -am x",
+      "cd - && rm -rf hooks && git commit -am x",
+      "popd && rm -rf hooks && git commit -am x",
+    ]) {
+      expect(bash(command).decision, command).toBe("ask");
+    }
+    repo.write("notes.log", "x\n");
+    expect(bash("rm -f *.log && git commit -m x").decision).toBeUndefined();
+  });
+
+  it("schreibt ein Befehl vor `git commit -a` getrackte Dateien, fragt der Hook: deren Größe sieht er vorher nicht", () => {
+    repo = makeRepo({ "app/a.ts": "a\n" });
+    expect(bash("sed -i '' 's/a/b/' app/a.ts && git commit -am x").decision).toBe("ask");
+    expect(bash("echo x > app/a.ts && git commit -m x app/a.ts").decision).toBe("ask");
+    expect(bash("echo x > out.txt && git commit -am x").decision).toBeUndefined();
+    expect(bash("echo x > app/a.ts && git commit -m x").decision).toBeUndefined();
+  });
+
   it("geänderter Code in skr03.ts fragt nach, ein geänderter Kommentar nicht", () => {
     repo = makeRepo({ "app/lib/skr03.ts": '// Konten\nexport const A = "4930";\n' });
     repo.write("app/lib/skr03.ts", '// Konten, Stand Oktober\nexport const A = "4930";\n');
