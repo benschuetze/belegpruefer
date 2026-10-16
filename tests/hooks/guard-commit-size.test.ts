@@ -160,11 +160,23 @@ describe("Commit-Größe: über 400 geänderte Zeilen wird der Commit abgelehnt"
     rmSync(dirname(link), { recursive: true, force: true });
   });
 
-  it("sudo und abgekürztes --amen ändern nichts an der Prüfung", () => {
+  it("sudo, exec, timeout und abgekürzte Optionen ändern nichts an der Prüfung", () => {
     repo = makeRepo({ "app/a.ts": lines(300) });
     repo.write("app/b.ts", lines(300));
     repo.stage("app/b.ts");
-    expect(bash("sudo -u ben git commit -m x").decision).toBeUndefined();
     expect(bash("git commit --amen --no-edit").decision).toBe("deny");
+    expect(bash("git commit --am --no-edit").decision).toBe("deny");
+    repo.write("app/c.ts", lines(200));
+    repo.stage("app/c.ts");
+    for (const command of [
+      "sudo -u ben git commit -m x",
+      "sudo --user ben git commit -m x",
+      "sudo -R /x git commit -m x",
+      "exec -a name git commit -m x",
+      "timeout 30 git commit -m x",
+      'git commit --mess "fix: x" -q',
+    ]) {
+      expect(bash(command).decision, command).toBe("deny");
+    }
   });
 });

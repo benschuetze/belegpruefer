@@ -11,5 +11,8 @@ export type Commit = {
 
 export function findCommits(text: string, base: string): Commit[];
 
-/** Absolute paths that commands in the shell command may write (redirection targets included). */
-export function writtenPaths(text: string, base: string): string[];
+/**
+ * Absolute paths that commands before the last commit may write (known writers and output redirections), and the
+ * first command or path whose writes could not be determined.
+ */
+export function writtenPaths(text: string, base: string): { paths: string[]; unknown: string | null };

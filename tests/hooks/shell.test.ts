@@ -78,6 +78,16 @@ describe("findCommits: Optionen, Pfade und was keine Pfade sind", () => {
     expect(one("git commit -SABC123 -m x")).toMatchObject({ all: false, paths: [] });
   });
 
+  it("eindeutige Abkürzungen langer Optionen nehmen ihren Wert mit", () => {
+    expect(one("git commit --mess x -q")).toMatchObject({ amend: false, paths: [] });
+    expect(one("git commit --am --no-edit")).toMatchObject({ amend: true, paths: [] });
+    expect(one("git commit --fil msg.txt")).toMatchObject({ paths: [] });
+  });
+
+  it("cd in einer Subshell gilt nur dort", () => {
+    expect(one("(cd app && ls) && git commit -m x").dir).toBe(BASE);
+  });
+
   it("-ma ist -m mit der Nachricht a, nicht -a", () => {
     expect(one("git commit -ma")).toMatchObject({ all: false, paths: [] });
   });

@@ -13,8 +13,8 @@
 // environment of the Claude Code process, which a prefix on the Bash command does not reach, and settings files that
 // could set it are guarded by guard-paths.mjs.
 import { readFileSync } from "node:fs";
-import { join, relative, sep } from "node:path";
-import { decide, findRepoRoot, git, isProjectRepo, note, readInput, SKR03_PATH, skr03Code } from "./lib.mjs";
+import { isAbsolute, join, relative, sep } from "node:path";
+import { decide, findRepoRoot, git, isProjectRepo, note, readInput, realPath, SKR03_PATH, skr03Code } from "./lib.mjs";
 import { findCommits, writtenPaths } from "./shell.mjs";
 
 const fromEnv = Number(process.env.BELEGPRUEFER_MAX_COMMIT_LINES);
@@ -40,8 +40,21 @@ const GUARDED = [
   /^\.claude\/settings(\.local)?\.json$/,
 ];
 
-/** Folders that hold guarded files: removing or overwriting one removes what is inside. */
-const GUARDED_DIRS = new Set([".claude", ".claude/hooks", ".github", ".github/workflows", "drizzle", "evals"]);
+/**
+ * Guarded files and folders as plain prefixes, to tell whether a folder a shell command writes holds one:
+ * `rm -rf app` removes skr03.ts, `rm -rf .` everything.
+ */
+const GUARDED_PREFIXES = [
+  ".claude/hooks/",
+  ".claude/settings.json",
+  ".claude/settings.local.json",
+  ".github/workflows/",
+  "evals/belege.json",
+  "evals/generate.ts",
+  "drizzle/",
+  SKR03_PATH,
+];
+const holdsGuarded = (rel) => rel === "" || GUARDED_PREFIXES.some((p) => p.startsWith(`${rel}/`));
 
 const input = await readInput();
 const command = input?.tool_input?.command;
@@ -51,7 +64,7 @@ try {
   const cwd = typeof input.cwd === "string" ? input.cwd : process.cwd();
   const commits = findCommits(command, cwd);
   // What Bash writes in the same call is not in any diff yet, because the hook runs first.
-  const written = commits.length > 0 ? writtenPaths(command, cwd) : [];
+  const written = commits.length > 0 ? writtenPaths(command, cwd) : { paths: [], unknown: null };
   const verdicts = commits.map((commit) => check(commit, written)).filter(Boolean);
   const denied = verdicts.find((v) => v.decision === "deny");
   const asked = verdicts.find((v) => v.decision === "ask");
@@ -76,7 +89,10 @@ function check(commit, written) {
         "Commit in einem Verzeichnis aus Variable oder Ersetzung: Größe und geschützte Dateien ließen sich nicht prüfen. Ben fragen oder den Pfad ausschreiben.",
     };
   }
-  const root = findRepoRoot(commit.dir);
+  // Resolved before the repo is judged: a symlink inside the project can point into a foreign repository, whose
+  // config (clean filters, fsmonitor) git would otherwise run.
+  const dir = realPath(commit.dir);
+  const root = findRepoRoot(dir);
   if (!root) return null;
   if (!isProjectRepo(root)) return null;
 
@@ -90,7 +106,7 @@ function check(commit, written) {
 
   let changes;
   try {
-    changes = measure(commit.dir, base, commit);
+    changes = measure(dir, base, commit);
   } catch {
     return { decision: "ask", reason: "git diff ist gescheitert; Größe des Commits unbekannt. Ben fragen." };
   }
@@ -133,22 +149,28 @@ function check(commit, written) {
     };
   }
 
-  const named = written
-    .map((p) => relative(root, p).split(sep).join("/"))
+  const named = written.paths
+    .map((p) => relative(root, realPath(p)).split(sep).join("/"))
     .find((rel) => {
       const lower = rel.toLowerCase();
-      if (rel.startsWith("..")) return false;
+      if (rel.startsWith("..") || isAbsolute(rel)) return false;
       return (
-        GUARDED_DIRS.has(lower) ||
+        holdsGuarded(lower) ||
         GUARDED.some((re) => re.test(lower)) ||
         /^drizzle\/[^/]+\.sql$/.test(lower) ||
         lower === SKR03_PATH
       );
     });
-  if (named) {
+  if (named !== undefined) {
     return {
       decision: "ask",
-      reason: `Im selben Aufruf schreibt ein Shell-Befehl auf ${named} (Leitplanken, „Nicht ohne Rückfrage ändern“ oder eine Migration). Der Hook sieht diese Änderung vor dem Commit nicht. Erst ändern, dann in einem eigenen Aufruf committen, oder Ben fragen.`,
+      reason: `Im selben Aufruf schreibt ein Shell-Befehl auf ${named || "."} (Leitplanken, „Nicht ohne Rückfrage ändern“ oder eine Migration, auch als Ordner darüber). Der Hook sieht diese Änderung vor dem Commit nicht. Erst ändern, dann in einem eigenen Aufruf committen, oder Ben fragen.`,
+    };
+  }
+  if (written.unknown) {
+    return {
+      decision: "ask",
+      reason: `\`${written.unknown}\` vor dem Commit schreibt womöglich auf Dateien, die der Hook nicht auflösen kann (Variable, unbekanntes Verzeichnis oder ein Befehl wie patch oder git apply). Erst in einem eigenen Aufruf ausführen, dann committen, oder Ben fragen.`,
     };
   }
 

@@ -1,4 +1,4 @@
-import { existsSync } from "node:fs";
+import { existsSync, symlinkSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { lines, makeRepo, runHook } from "./run-hook";
@@ -80,6 +80,39 @@ describe("was guard-paths nicht sieht, fängt der Commit ab (Änderungen per Bas
     }
   });
 
+  it("Leser, Eingabe-Umleitungen und Werte von git-Optionen sind keine Schreibziele", () => {
+    repo = makeRepo({ ".claude/settings.json": "{}\n", ".claude/hooks/guard-paths.mjs": "x\n", "app/a.ts": "a\n" });
+    repo.write("app/a.ts", "b\n");
+    for (const command of [
+      "grep x < .claude/settings.json && git commit -am x",
+      "wc -l <<< .claude/settings.json; git commit -am x",
+      "node scripts/check.mjs .claude/hooks/guard-paths.mjs; git commit -am x",
+      "git -c x.y=1 log .claude/hooks/guard-paths.mjs; git commit -am x",
+      "git commit -am x && echo p > .claude/settings.json",
+    ]) {
+      expect(bash(command).decision, command).toBeUndefined();
+    }
+  });
+
+  it("Ordner, die Geschütztes enthalten, Toplevel per rev-parse, Subshell-cd und unbekannte Ziele fragen", () => {
+    repo = makeRepo({
+      "app/lib/skr03.ts": 'export const A = "4930";\n',
+      ".claude/settings.json": "{}\n",
+      "app/a.ts": "a\n",
+    });
+    for (const command of [
+      "rm -rf app && git commit -am x",
+      "rm -rf app/lib/ && git commit -am x",
+      "rm -rf . && git commit -am x",
+      'cd "$(git rev-parse --show-toplevel)" && echo p > .claude/settings.json && git commit -am x',
+      "(cd app && echo x > a.ts) && echo p > .claude/settings.json && git commit -am x",
+      'echo p > "$F" && git commit -am x',
+      `cd "$D" && rm -rf hooks; cd ${repo.root} && git commit -am x`,
+    ]) {
+      expect(bash(command).decision, command).toBe("ask");
+    }
+  });
+
   it("geänderter Code in skr03.ts fragt nach, ein geänderter Kommentar nicht", () => {
     repo = makeRepo({ "app/lib/skr03.ts": '// Konten\nexport const A = "4930";\n' });
     repo.write("app/lib/skr03.ts", '// Konten, Stand Oktober\nexport const A = "4930";\n');
@@ -99,6 +132,21 @@ describe("Sicherheit des Hooks selbst", () => {
     evil.git("config", "core.fsmonitor", `touch ${marker}`);
     try {
       expect(bash(`cd ${evil.root} && git commit -m x`, "/").decision).toBeUndefined();
+      expect(existsSync(marker)).toBe(false);
+    } finally {
+      evil.remove();
+    }
+  });
+
+  it("ein Symlink im Projekt auf ein fremdes Repository lässt dessen clean-Filter nicht laufen", () => {
+    repo = makeRepo({ "app/a.ts": "a\n" });
+    const evil = makeRepo({ "sub/f.txt": "a\n", ".gitattributes": "* filter=x\n" });
+    const marker = join(evil.root, "filter-ran");
+    evil.git("config", "filter.x.clean", `touch ${marker}; cat`);
+    evil.write("sub/f.txt", "b\n");
+    symlinkSync(join(evil.root, "sub"), join(repo.root, "link"));
+    try {
+      bash("cd link && git commit -am x");
       expect(existsSync(marker)).toBe(false);
     } finally {
       evil.remove();
