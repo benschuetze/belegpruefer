@@ -10,7 +10,7 @@ Eingangsrechnungen für mehrere Mandanten: hochladen, auslesen, nach SKR03 konti
 |---|---|
 | **Frage der Startseite** | Wie viele Belege sind fertig, wie viele brauchen dich? |
 | **Agenten** | Kontierer (`claude-haiku-5-5`), Prüfer auf anderem Modell (`claude-sonnet-5-5`), Recherche mit zwei lesenden Werkzeugen, Extraktor für PDF. Entschieden wird in Code, nicht vom Modell. |
-| **Ergebnis des Evals** | 165 erfundene Belege, vier Aufstellungen gegen das echte Modell: **0 % falsch trotz automatisch** in jeder Aufstellung, Konto richtig 98,8–100 %, gut 70 % automatisch gebucht. Der Kontierer allein (0,016 ct je Beleg) ist hier so gut wie das ganze Team (0,38 ct) – das steht so drin, samt der Korrektur eines früheren Fazits. |
+| **Ergebnis des Evals** | 165 erfundene Belege, vier Aufstellungen gegen das echte Modell: **0 % falsch trotz automatisch** in jeder Aufstellung, Konto richtig 98,8–100 %, knapp 70 % automatisch gebucht. Der Kontierer allein (0,016 ct je Beleg) ist hier so gut wie das ganze Team (0,38 ct) – das steht so drin, samt der Korrektur eines früheren Fazits. |
 | **Sicherheit** | Mandant nur aus der Session, Fremdschlüssel je Mandant, Protokoll und Festschreibung per Datenbank-Trigger unveränderbar, zwei Linien gegen Prompt Injection. Details in [SECURITY.md](SECURITY.md). |
 | **Tests** | 245 Unit- und Datenbanktests (Vitest mit PGlite), 16 Nutzerabläufe in Chromium und WebKit (Playwright mit axe), CI auf GitHub Actions. |
 | **Stack** | React Router 7, TypeScript strict, Drizzle, Neon Postgres (Frankfurt), Vercel, Vercel AI SDK mit Claude, Zod, Tailwind, Biome. |
@@ -126,14 +126,14 @@ Die Schwelle 0,85 kommt aus dem Eval (Startwert war 0,8), siehe unten.
 
 Gemessen am **12.10.2026** auf **165 erfundenen Belegen** (`evals/belege.json`), Kontierer und Recherche `claude-haiku-5-5`, Prüfer `claude-sonnet-5-5`, Prompts `kontierer-2026-10-12.2` / `pruefer-2026-10-12.2`. Rohdaten je Beleg in `evals/runs/`, Zusammenfassung in `evals/ergebnis.json`, im Demo unter „Eval“. Der ganze Lauf hat 2,05 $ gekostet.
 
-Die Tabelle zeigt die Entscheidung mit der gewählten Schwelle (0,85 normal, 0,9 für Risikokonten); die Bewertung spielt die Entscheidung in Code auf den gespeicherten Antworten nach.
+Die Tabelle zeigt die Entscheidung mit der gewählten Schwelle (0,85 normal, 0,9 für Risikokonten); die Bewertung spielt die Entscheidung in Code auf den gespeicherten Antworten nach. Stand der Bewertung: 15.10.2026, nach der Stichprobe von Hand (`evals/stichprobe.md`). Seitdem erwarten Injection-Belege nur noch „prüfen“, und Bewirtungen mit mehr Gedecken als genannten Teilnehmern ebenfalls. Vier solcher Bewirtungen wären sonst automatisch durchgegangen; das fängt jetzt eine Regel im Validator ab, deshalb gut zwei Punkte weniger Automatik.
 
 | Aufstellung | Konto richtig | BU richtig | automatisch | **falsch trotz automatisch** | Kosten/Beleg | Zeit/Beleg |
 |---|---:|---:|---:|---:|---:|---:|
-| 1 Kontierer allein | 100 % | 100 % | 72,7 % | **0 %** (0) | 0,016 ct | 1,7 s |
-| 2 + Prüfer | 100 % | 100 % | 72,1 % | **0 %** (0) | 0,362 ct | 4,2 s |
-| 3 + Prüfer + Recherche | 98,8 % | 100 % | 69,7 % | **0 %** (0) | 0,374 ct | 5,8 s |
-| 4 + Prüfer + Recherche + Beispiele | 98,8 % | 100 % | 71,5 % | **0 %** (0) | 0,378 ct | 5,8 s |
+| 1 Kontierer allein | 100 % | 100 % | 70,3 % | **0 %** (0) | 0,016 ct | 1,7 s |
+| 2 + Prüfer | 100 % | 100 % | 69,7 % | **0 %** (0) | 0,362 ct | 4,2 s |
+| 3 + Prüfer + Recherche | 98,8 % | 100 % | 67,9 % | **0 %** (0) | 0,374 ct | 5,8 s |
+| 4 + Prüfer + Recherche + Beispiele | 98,8 % | 100 % | 69,1 % | **0 %** (0) | 0,378 ct | 5,8 s |
 
 Kalibrierung (Aufstellung 4, Anteil richtig kontierter Belege je Konfidenzbereich, halboffene Intervalle): [0; 0,6): 13 Belege, 100 % · [0,6; 0,8): 4, 75 % · [0,8; 0,9): 12, 92 % · [0,9; 1]: 136, 100 %. Ein Beleg mit genau 0,80 gehört zu [0,8; 0,9). Extraktion aus PDF (`claude-sonnet-5-5`, 20 erfundene Rechnungen in drei Layouts): alle neun Felder bei allen 20 richtig, 0,93 ct je Beleg.
 
@@ -174,7 +174,7 @@ Vor einem echten Einsatz von einer Steuerberaterin prüfen lassen:
 - **DATEV-Format.** Kopfsatz (31 Felder) und die ersten 14 Spalten folgen den öffentlich beschriebenen Formaten; die vollständige Schnittstellenbeschreibung ist nur mit DATEV-Login zugänglich. Der Import in DATEV selbst ist nicht getestet. Die Festschreibung im Kopf steht auf 0: in der App ist der Zeitraum zu, in DATEV kann die Kanzlei noch korrigieren.
 - **Gegenkonto 1600.** Gebucht wird gegen das Sammelkonto Verbindlichkeiten. In DATEV sind Kreditorenkonten (ab 70000) üblich, mit Offene-Posten-Führung; das bräuchte Kreditorenstammdaten je Mandant.
 - **Storno.** Als Gegenbuchung im Haben; DATEV kennt dafür auch die Generalumkehr über den BU-Schlüssel, die die Verkehrszahlen nicht aufbläht.
-- **Bewirtung.** Gebucht wird der volle Betrag auf 4650. Steuerlich abziehbar sind 70 % (§ 4 Abs. 5 Nr. 2 EStG); die Aufteilung auf 4654 (nicht abzugsfähig) überlässt die App der Kanzlei. Der Validator prüft Anlass und Teilnehmer, nicht Ort, Tag, Bewirtenden und die Angaben einer maschinellen Rechnung.
+- **Bewirtung.** Gebucht wird der volle Betrag auf 4650. Steuerlich abziehbar sind 70 % (§ 4 Abs. 5 Nr. 2 EStG); die Aufteilung auf 4654 (nicht abzugsfähig) überlässt die App der Kanzlei. Der Validator prüft Anlass und Teilnehmer und ob für jedes Gedeck ein Teilnehmer genannt ist, nicht Ort, Tag, Bewirtenden und die Angaben einer maschinellen Rechnung.
 - **Drittland.** Leistungen aus Nicht-EU-Ländern ohne deutsche Steuer (§ 13b Abs. 2 UStG) gehen immer zur Prüfung; den Steuerschlüssel setzt die App dort nicht selbst.
 - **GWG und Sammelposten.** Als GWG gelten nur selbständig nutzbare Gegenstände (Stuhl, Regal, Leuchte), nicht Monitor oder Drucker. Die Wahl des Sammelpostens (250 bis 1.000 €, § 6 Abs. 2a EStG) je Mandant fehlt.
 - **Kontenwahl als Kanzleientscheidung.** Rohkaffee und Tüten einer Rösterei als Wareneingang (3300/3400) statt Roh- und Hilfsstoffe, Getränke fürs Büro auf 4930 statt 4140: gängig, aber nicht die einzige richtige Wahl. 4955 und 4957 (Buchführung, Abschluss) sind aus der Kontenliste übernommen, aber nicht gegen einen Kanzlei-Kontenplan geprüft.

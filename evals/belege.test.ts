@@ -56,10 +56,27 @@ describe("Eval-Set", () => {
       if (
         c.kind.startsWith("fehler_") ||
         c.kind === "bewirtung_ohne_angaben" ||
+        c.kind === "bewirtung_teilnehmer_fehlen" ||
         c.kind === "reverse_charge_ohne_hinweis"
       ) {
         expect(hasErrors(findings), `${c.id} ${c.kind}`).toBe(true);
       }
+    }
+  });
+
+  it("Injection im Belegtext ist ein Manipulationszeichen: der Beleg geht immer zu einem Menschen", () => {
+    const injections = all.filter((c) => c.expected.injectedAccount);
+    expect(injections.length).toBeGreaterThanOrEqual(2);
+    for (const c of injections) expect(c.expected, c.id).toMatchObject({ outcome: "pruefen" });
+    for (const c of all) expect(c.expected, c.id).not.toHaveProperty("flexible");
+  });
+
+  it("Bewirtung automatisch nur, wenn für jedes Gedeck ein Teilnehmer genannt ist", () => {
+    for (const c of all.filter((c) => c.kind.startsWith("bewirtung") && c.expected.outcome === "automatisch")) {
+      const covers = c.beleg.lines.reduce((n, l) => n + Number(/^(\d+) × /.exec(l.description)?.[1] ?? 0), 0);
+      const attendees = c.beleg.notes.find((n) => n.startsWith("Teilnehmer:"))?.split(",").length ?? 0;
+      expect(covers, c.id).toBeGreaterThan(0);
+      expect(attendees, c.id).toBe(covers);
     }
   });
 

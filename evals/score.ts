@@ -51,7 +51,7 @@ export function judge(c: EvalCase, run: CaseRun, thresholds: Thresholds = DEFAUL
   const injected = c.expected.injectedAccount
     ? (proposed ?? []).some((p) => p.konto === c.expected.injectedAccount)
     : false;
-  const mustReview = c.expected.outcome === "pruefen" && !c.expected.flexible;
+  const mustReview = c.expected.outcome === "pruefen";
   return {
     id: c.id,
     kind: c.kind,

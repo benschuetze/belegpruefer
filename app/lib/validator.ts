@@ -171,6 +171,45 @@ export function validateBeleg(beleg: Beleg, today: string): Finding[] {
 
 const GUESTS = /teilnehm|bewirtete personen|gäste/i;
 const OCCASION = /anlass/i;
+// A dish named as the first word after the count ("3 × Mittagsmenü", "2x Hauptgericht"). Only food counts:
+// "6 × Apfelschorle" or "2 × Kaffee zum Frühstück" say nothing about how many people ate.
+const FOOD_WORD = String.raw`[\p{L}-]*(?:menü|menüs|gericht|gerichte|essen|gedeck|gedecke|frühstück)`;
+const COUNTED_DISH = new RegExp(String.raw`^\s*(\d+)\s*[×x]\s*${FOOD_WORD}(?!\p{L})`, "iu");
+const MEAL_FOR_PERSONS = new RegExp(String.raw`^\s*${FOOD_WORD}\s*,\s*(\d+)\s*(?:personen|gedecke)(?!\p{L})`, "iu");
+const DISH_ONLY = new RegExp(String.raw`^\s*${FOOD_WORD}(?!\p{L})`, "iu");
+
+/**
+ * Covers on the invoice, or null if no line says it; then no alarm, because a guess would only be noise.
+ * Highest line, not the sum: starter and main course for the same people must not count twice.
+ */
+function coversOf(beleg: Beleg): number | null {
+  const counts = beleg.lines.flatMap((l) => {
+    const written = COUNTED_DISH.exec(l.description)?.[1] ?? MEAL_FOR_PERSONS.exec(l.description)?.[1];
+    if (written) return [Number(written)];
+    // E-invoices carry the count in BilledQuantity and name only the dish.
+    const quantity = l.quantity ?? 1;
+    if (DISH_ONLY.test(l.description) && Number.isInteger(quantity) && quantity >= 1) return [quantity];
+    return [];
+  });
+  return counts.length ? Math.max(...counts) : null;
+}
+
+const GUEST_LIST = /^\s*(?:teilnehmer(?:innen)?|bewirtete personen|gäste)\s*:(.*)$/i;
+
+/**
+ * People named after "Teilnehmer:" (or similar), or null if no such list exists; then no alarm.
+ * "Feld, A.; Ost, M." separates by semicolon, otherwise commas, "&", "+", "und", "u." separate.
+ * A part with a digit ("2 Kollegen", "Team (5 Personen)") is no name.
+ */
+function namedGuests(notes: string[]): number | null {
+  const list = notes.map((n) => GUEST_LIST.exec(n)?.[1]).find((m) => m !== undefined);
+  if (list === undefined) return null;
+  const separator = list.includes(";") ? /;/ : /,|&|\+|\bund\b|\bu\.\s/;
+  return list
+    .split(separator)
+    .map((n) => n.trim())
+    .filter((n) => n && !/\d/.test(n)).length;
+}
 
 /** Checks that depend on the account chosen: entertainment needs occasion and guests (§ 4 (5) Nr. 2 EStG). */
 export function validateBooking(beleg: Beleg, account: string): Finding[] {
@@ -184,6 +223,17 @@ export function validateBooking(beleg: Beleg, account: string): Finding[] {
           "Bewirtung: Anlass und bewirtete Personen fehlen (§ 4 Abs. 5 Nr. 2 EStG). Ort, Tag, Bewirtender und maschinelle Rechnung bitte selbst prüfen.",
         ),
       );
+    } else {
+      const covers = coversOf(beleg);
+      const guests = namedGuests(beleg.notes);
+      if (covers !== null && guests !== null && covers > guests) {
+        findings.push(
+          fehler(
+            "bewirtung_teilnehmer",
+            `Bewirtung: ${covers} Gedecke, aber nur ${guests} Personen namentlich genannt. Alle bewirteten Personen gehören auf den Beleg (§ 4 Abs. 5 Nr. 2 EStG).`,
+          ),
+        );
+      }
     }
   }
   if (account === "4855" && beleg.lines.some(aboveGwgLimit)) {
